@@ -174,31 +174,82 @@ const initDatabase = async () => {
 };
 
 // ============ 中间件 ============
-app.use(helmet());
-app.use(cors({
-  origin: function(origin, callback) {
-    // 允许所有来源或指定来源
-    const allowedOrigins = [
-      'http://localhost:8080',
-      'http://127.0.0.1:8080',
-      'https://your-frontend.vercel.app',
-      'https://backenbsfootball.vercel.app'
-    ];
+app.use(helmet({
+  // 根据前端需要调整Helmet设置
+  contentSecurityPolicy: false, // 暂时禁用CSP，避免前端资源被阻止
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: false
+}));
+
+// ============ CORS配置 ============
+// 开发环境：允许所有来源
+// 生产环境：应该指定具体来源
+const corsOptions = {
+  origin: function (origin, callback) {
+    // 允许所有来源（开发环境）
+    if (process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
     
-    if (!origin || allowedOrigins.includes(origin) || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    // 生产环境：只允许特定来源
+    if (!origin) {
       callback(null, true);
     } else {
-      callback(new Error('不允许的跨域请求'));
+      const allowedOrigins = [
+        'https://footballdream.vercel.app',
+        'https://backenbsfootball.vercel.app',
+        'https://your-frontend-domain.vercel.app'
+      ];
+      
+      if (allowedOrigins.includes(origin) || 
+          origin.includes('vercel.app') ||
+          origin.includes('localhost')) {
+        callback(null, true);
+      } else {
+        console.log(`CORS拒绝: ${origin}`);
+        callback(new Error('不允许的跨域请求'));
+      }
     }
   },
-  credentials: true
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers',
+    'X-API-Key',
+    'X-Auth-Token'
+  ],
+  exposedHeaders: [
+    'Content-Range', 
+    'X-Content-Range',
+    'X-Total-Count',
+    'Link'
+  ],
+  credentials: true,
+  maxAge: 86400, // 预检请求缓存时间（秒）
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+// 应用CORS中间件
+app.use(cors(corsOptions));
+
+// 处理预检请求
+app.options('*', cors(corsOptions));
+
+// 请求体解析
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 日志中间件
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  console.log(`${new Date().toISOString()} ${req.method} ${req.url} - Origin: ${req.headers.origin || 'none'}`);
   next();
 });
 
