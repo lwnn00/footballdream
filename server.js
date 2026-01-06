@@ -345,7 +345,157 @@ app.get('/api/test', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+// ============ 添加临时注册端点 ============
 
+// 临时简单注册（不需要邀请码）
+app.post('/api/simple-register', async (req, res) => {
+  try {
+    console.log('收到简单注册请求:', req.body);
+    
+    const { username, password } = req.body;
+    
+    // 简单验证
+    if (!username || username.length < 3) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '用户名至少需要3个字符' 
+      });
+    }
+    
+    if (!password || password.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '密码至少需要6个字符' 
+      });
+    }
+    
+    // 检查用户名是否已存在
+    const userExists = await pool.query(
+      'SELECT id FROM users WHERE username = $1',
+      [username]
+    );
+    
+    if (userExists.rows.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '用户名已存在' 
+      });
+    }
+    
+    // 加密密码
+    const hashedPassword = await bcrypt.hash(password, 12);
+    
+    // 创建试用用户（可保存18条记录）
+    const userResult = await pool.query(
+      `INSERT INTO users 
+       (username, password, user_type, trial_count, max_trial_count, trial_end_date) 
+       VALUES ($1, $2, $3, 0, 18, CURRENT_TIMESTAMP + INTERVAL '30 days') 
+       RETURNING id, username, user_type, registration_date`,
+      [username, hashedPassword, 'trial']  // 注意：user_type 改为 'trial'
+    );
+    
+    // 生成JWT令牌
+    const token = generateToken(userResult.rows[0].id);
+    
+    console.log('简单注册成功，用户ID:', userResult.rows[0].id);
+    
+    res.status(201).json({
+      success: true,
+      user: {
+        id: userResult.rows[0].id,
+        username: userResult.rows[0].username,
+        userType: 'trial',  // 确保返回正确的用户类型
+        registrationDate: userResult.rows[0].registration_date,
+        trialCount: 0,
+        maxTrialCount: 18
+      },
+      token,
+      message: '注册成功！您现在是试用用户，可以保存18条记录。'
+    });
+    
+  } catch (error) {
+    console.error('简单注册错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      detail: error.detail
+    });
+    
+    res.status(500).json({ 
+      success: false, 
+      error: '注册失败: ' + error.message,
+      details: process.env.NODE_ENV !== 'production' ? error.detail : undefined
+    });
+  }
+});
+
+// 临时简单登录（备选方案）
+app.post('/api/simple-login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '用户名和密码不能为空' 
+      });
+    }
+    
+    // 查找用户
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE username = $1',
+      [username]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ 
+        success: false, 
+        error: '用户名或密码错误' 
+      });
+    }
+    
+    const user = userResult.rows[0];
+    
+    // 验证密码
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ 
+        success: false, 
+        error: '用户名或密码错误' 
+      });
+    }
+    
+    // 更新最后登录时间
+    await pool.query(
+      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
+      [user.id]
+    );
+    
+    // 生成JWT令牌
+    const token = generateToken(user.id);
+    
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        userType: user.user_type || 'trial',
+        trialCount: user.trial_count || 0,
+        maxTrialCount: user.max_trial_count || 18,
+        trialEndDate: user.trial_end_date
+      },
+      token,
+      message: '登录成功'
+    });
+    
+  } catch (error) {
+    console.error('简单登录错误:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '登录失败' 
+    });
+  }
+});
 // 2. 用户注册
 app.post('/api/register', validateRegister, async (req, res) => {
   try {
