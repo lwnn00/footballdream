@@ -127,70 +127,7 @@ const initDatabase = async () => {
       CREATE INDEX IF NOT EXISTS idx_invitation_codes_code ON invitation_codes(code);
       CREATE INDEX IF NOT EXISTS idx_invitation_codes_is_active ON invitation_codes(is_active);
     `);
-    // 在 initDatabase 函数中添加修复脚本
-const fixJsonData = async () => {
-  try {
-    console.log('检查并修复 JSON 数据...');
     
-    // 修复 invitation_codes 表的 used_by 字段
-    const codesResult = await pool.query(
-      'SELECT id, used_by FROM invitation_codes WHERE used_by IS NOT NULL'
-    );
-    
-    for (const row of codesResult.rows) {
-      try {
-        let fixedData = row.used_by;
-        
-        // 如果是字符串但格式错误，尝试修复
-        if (typeof fixedData === 'string') {
-          // 清理字符串
-          fixedData = fixedData.trim();
-          
-          // 如果已经是有效的 JSON，验证它
-          try {
-            JSON.parse(fixedData);
-          } catch (parseError) {
-            // 尝试修复常见的 JSON 错误
-            // 1. 缺少引号
-            fixedData = fixedData.replace(/(\w+):/g, '"$1":');
-            // 2. 修复单引号
-            fixedData = fixedData.replace(/'/g, '"');
-            // 3. 确保是数组格式
-            if (!fixedData.startsWith('[')) {
-              fixedData = `[${fixedData}]`;
-            }
-            
-            // 再次验证
-            JSON.parse(fixedData);
-          }
-        }
-        
-        // 更新修复后的数据
-        await pool.query(
-          'UPDATE invitation_codes SET used_by = $1::jsonb WHERE id = $2',
-          [fixedData, row.id]
-        );
-        
-      } catch (fixError) {
-        console.warn(`无法修复 ID ${row.id} 的数据，重置为空数组:`, fixError);
-        // 重置为有效空数组
-        await pool.query(
-          'UPDATE invitation_codes SET used_by = $1::jsonb WHERE id = $2',
-          ['[]', row.id]
-        );
-      }
-    }
-    
-    console.log('✅ JSON 数据修复完成');
-  } catch (error) {
-    console.error('❌ JSON 数据修复失败:', error);
-  }
-};
-
-// 在数据库初始化后调用
-initDatabase().then(() => {
-  fixJsonData();
-});
     // 创建默认管理员账户
     const adminCheck = await pool.query(
       'SELECT id FROM users WHERE username = $1',
@@ -410,31 +347,9 @@ app.get('/api/test', (req, res) => {
 });
 
 // 2. 用户注册
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', validateRegister, async (req, res) => {
   try {
     const { username, password, invitationCode } = req.body;
-    
-    // 验证输入
-    if (!username || username.length < 3) {
-      return res.status(400).json({ 
-        success: false, 
-        error: '用户名至少需要3个字符' 
-      });
-    }
-    
-    if (!password || password.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        error: '密码至少需要6个字符' 
-      });
-    }
-    
-    if (!invitationCode) {
-      return res.status(400).json({ 
-        success: false, 
-        error: '请提供邀请码' 
-      });
-    }
     
     // 检查用户名是否已存在
     const userExists = await pool.query(
@@ -497,125 +412,22 @@ app.post('/api/register', async (req, res) => {
       [username, hashedPassword, 'registered', invitationCode, code.created_by]
     );
     
-    // 修复：正确处理 used_by JSON 字段
-    let usedByArray = [];
-    
-    if (code.used_by) {
-      // 如果 used_by 是字符串，解析它
-      if (typeof code.used_by === 'string') {
-        try {
-          usedByArray = JSON.parse(code.used_by);
-        } catch (parseError) {
-          console.warn('解析 used_by 失败，使用空数组:', parseError);
-          usedByArray = [];
-        }
-      } else if (Array.isArray(code.used_by)) {
-        // 如果已经是数组，直接使用
-        usedByArray = code.used_by;
-      } else if (code.used_by && typeof code.used_by === 'object') {
-        // 如果是对象，转换为数组
-        usedByArray = [code.used_by];
-      }
-    }
-    
-    // 确保 usedByArray 是数组
-    if (!Array.isArray(usedByArray)) {
-      usedByArray = [];
-    }
-    
-    // 添加新用户到使用记录
-    usedByArray.push({
+    // 更新邀请码使用记录
+    const usedBy = code.used_by || [];
+    usedBy.push({
       username: username,
       used_at: new Date().toISOString(),
       user_id: userResult.rows[0].id
     });
     
-    // 更新邀请码使用记录
     await pool.query(
       `UPDATE invitation_codes 
        SET used_count = used_count + 1, 
-           used_by = $1::jsonb,
-           is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END,
-           updated_at = CURRENT_TIMESTAMP
+           used_by = $1,
+           is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END
        WHERE code = $2`,
-      [JSON.stringify(usedByArray), invitationCode]
+      [usedBy, invitationCode]
     );
-    
-    // 生成JWT令牌
-    const token = generateToken(userResult.rows[0].id);
-    
-    res.status(201).json({
-      success: true,
-      user: {
-        id: userResult.rows[0].id,
-        username: userResult.rows[0].username,
-        userType: userResult.rows[0].user_type,
-        registrationDate: userResult.rows[0].registration_date
-      },
-      token,
-      message: '注册成功'
-    });
-    
-  } catch (error) {
-    console.error('❌ 注册错误详情:', {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-      detail: error.detail,
-      table: error.table,
-      constraint: error.constraint
-    });
-    
-    // 返回更详细的错误信息
-    const errorMessage = process.env.NODE_ENV === 'production' 
-      ? '注册失败，请检查输入信息' 
-      : error.message;
-    
-    res.status(500).json({ 
-      success: false, 
-      error: errorMessage,
-      ...(process.env.NODE_ENV !== 'production' && {
-        details: error.detail || error.code,
-        hint: error.hint
-      })
-    });
-  }
-});
-    
-    // 在 server.js 中找到注册路由中的邀请码更新部分（大约第 423 行）
-// 更新邀请码使用记录
-const usedBy = code.used_by || [];
-usedBy.push({
-  username: username,
-  used_at: new Date().toISOString(),
-  user_id: userResult.rows[0].id
-});
-
-await pool.query(
-  `UPDATE invitation_codes 
-   SET used_count = used_count + 1, 
-       used_by = $1,
-       is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END
-   WHERE code = $2`,
-  [JSON.stringify(usedBy), invitationCode]  // 确保使用 JSON.stringify
-);
-    
-    // 在 initDatabase 函数中，检查 invitation_codes 表的创建
-await pool.query(`
-  CREATE TABLE IF NOT EXISTS invitation_codes (
-    id SERIAL PRIMARY KEY,
-    code VARCHAR(50) UNIQUE NOT NULL,
-    created_by VARCHAR(50) NOT NULL,
-    created_for VARCHAR(50),
-    max_uses INTEGER DEFAULT 1,
-    used_count INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    expires_at TIMESTAMP,
-    used_by JSONB DEFAULT '[]'::jsonb,  // 确保默认值为空数组
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
     
     // 生成JWT令牌
     const token = generateToken(userResult.rows[0].id);
