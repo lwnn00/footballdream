@@ -200,7 +200,7 @@ const corsOptions = {
       const allowedOrigins = [
         'https://footballdream.vercel.app',
         'https://backenbsfootball.vercel.app',
-        'https://your-frontend-domain.vercel.app'
+        'https://lwnn00.github.io/footballdream'
       ];
       
       if (allowedOrigins.includes(origin) || 
