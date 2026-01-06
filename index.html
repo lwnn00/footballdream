@@ -1155,15 +1155,24 @@
 
     <script>
         // ============== 服务器API配置 ============== //
-        const API_CONFIG = {
-             // 根据部署环境自动选择API地址
+   const API_CONFIG = {
+  // 根据部署环境自动选择API地址
   getBaseUrl: function() {
+    // 如果是本地文件系统打开
+    if (window.location.protocol === 'file:' || 
+        window.location.hostname === '' || 
+        window.location.hostname === 'null') {
+      // 使用相对路径，避免跨域问题
+      return '';
+    }
+    
     // 如果是本地开发环境
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    if (window.location.hostname === 'localhost' || 
+        window.location.hostname === '127.0.0.1') {
       return 'http://localhost:3000';
     }
-    // 生产环境 - 使用完整的后端API地址
-    // 注意：替换为你实际的Vercel部署地址
+    
+    // 生产环境 - 使用你的Vercel后端地址
     return 'https://footballdream.vercel.app';
   },
   
@@ -2915,3 +2924,4 @@
 </body>
 
 </html>
+
