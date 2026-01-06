@@ -241,7 +241,40 @@ const initDatabase = async () => {
     console.error('❌ 数据库初始化失败:', error.message);
   }
 };
+const checkDatabaseTables = async () => {
+  try {
+    console.log('检查数据库表...');
+    
+    // 检查所有需要的表
+    const requiredTables = ['users', 'invitation_codes', 'records'];
+    
+    for (const table of requiredTables) {
+      const check = await pool.query(
+        `SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = $1
+        )`,
+        [table]
+      );
+      
+      if (!check.rows[0].exists) {
+        console.log(`⚠️  表 ${table} 不存在，正在创建...`);
+        await initDatabase();
+        break;
+      }
+    }
+    
+    console.log('✅ 所有表存在');
+  } catch (error) {
+    console.error('❌ 检查数据库表失败:', error);
+  }
+};
 
+// 在初始化后调用
+initDatabase().then(() => {
+  checkDatabaseTables();
+});
 // 初始化数据库
 initDatabase();
 
@@ -391,10 +424,28 @@ app.post('/api/register', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('注册错误:', error);
+    console.error('❌ 注册错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      detail: error.detail,
+      table: error.table,
+      constraint: error.constraint
+    });
+    
+    // 返回更详细的错误信息（开发环境）
+    const errorMessage = process.env.NODE_ENV === 'production' 
+      ? '服务器内部错误' 
+      : error.message;
+    
     res.status(500).json({ 
       success: false, 
-      error: '服务器内部错误' 
+      error: errorMessage,
+      // 开发环境返回更多信息
+      ...(process.env.NODE_ENV !== 'production' && {
+        details: error.detail || error.code,
+        hint: error.hint || '请检查数据库连接和表结构'
+      })
     });
   }
 });
