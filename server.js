@@ -12,11 +12,30 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // ============ 数据库连接 ============
+// 在 server.js 中优化连接池
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false },
+  
+  // Neon优化设置
+  max: process.env.NODE_ENV === 'production' ? 10 : 5, // 免费版最大10
+  min: 1,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+  allowExitOnIdle: false
+});
+
+// 添加连接池错误处理
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+pool.on('connect', () => {
+  console.log('Database connection established');
+});
+
+pool.on('acquire', () => {
+  console.log('Client checked out from pool');
 });
 
 // 测试数据库连接
