@@ -442,21 +442,21 @@ app.post('/api/register', validateRegister, async (req, res) => {
     );
     
     // 更新邀请码使用记录
-    const usedBy = code.used_by || [];
-    usedBy.push({
-      username: username,
-      used_at: new Date().toISOString(),
-      user_id: userResult.rows[0].id
-    });
-    
-    await pool.query(
-      `UPDATE invitation_codes 
-       SET used_count = used_count + 1, 
-           used_by = $1,
-           is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END
-       WHERE code = $2`,
-      [usedBy, invitationCode]
-    );
+const usedBy = code.used_by || [];
+usedBy.push({
+  username: username,
+  used_at: new Date().toISOString(),
+  user_id: userResult.rows[0].id
+});
+
+await pool.query(
+  `UPDATE invitation_codes 
+   SET used_count = used_count + 1, 
+       used_by = $1,
+       is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END
+   WHERE code = $2`,
+  [usedBy, invitationCode]
+);
     
     // 生成JWT令牌
     const token = generateToken(userResult.rows[0].id);
@@ -1218,13 +1218,24 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
 });
 
 // ============ 错误处理 ============
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: '未找到请求的资源'
-  });
+// 在server.js的中间件部分添加
+app.use((req, res, next) => {
+  // 验证JSON请求体
+  if (req.headers['content-type'] === 'application/json') {
+    try {
+      if (req.body && Object.keys(req.body).length > 0) {
+        // 确保所有JSON字段都是有效的
+        JSON.stringify(req.body);
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: '无效的JSON数据'
+      });
+    }
+  }
+  next();
 });
-
 app.use((err, req, res, next) => {
   console.error('服务器错误:', err);
   res.status(500).json({
