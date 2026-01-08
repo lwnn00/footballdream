@@ -206,7 +206,7 @@ app.use(helmet({
 }));
 
 // ============ CORS配置 ============
-// 开发环境：允许所有来源
+// 允许所有来源（开发环境）
 // 生产环境：应该指定具体来源
 const corsOptions = {
   origin: function (origin, callback) {
@@ -216,24 +216,30 @@ const corsOptions = {
       return;
     }
     
-    // 生产环境：只允许特定来源
+    // 生产环境：允许所有来源（或者只允许特定来源）
+    // 安全提示：在生产中，最好指定具体的域名
+    const allowedOrigins = [
+      'https://footballdream.vercel.app',
+      'https://backenbsfootball.vercel.app',
+      'https://lwnn00.github.io',
+      'https://lwnn00.github.io/footballdream'
+    ];
+    
+    // 如果请求头中没有origin（比如Postman请求），允许通过
     if (!origin) {
       callback(null, true);
+      return;
+    }
+    
+    // 检查是否在允许列表中
+    if (allowedOrigins.includes(origin) || 
+        origin.includes('vercel.app') ||
+        origin.includes('github.io') ||
+        origin.includes('localhost')) {
+      callback(null, true);
     } else {
-      const allowedOrigins = [
-        'https://footballdream.vercel.app',
-        'https://backenbsfootball.vercel.app',
-        'https://lwnn00.github.io/footballdream'
-      ];
-      
-      if (allowedOrigins.includes(origin) || 
-          origin.includes('vercel.app') ||
-          origin.includes('localhost')) {
-        callback(null, true);
-      } else {
-        console.log(`CORS拒绝: ${origin}`);
-        callback(new Error('不允许的跨域请求'));
-      }
+      console.log(`CORS拒绝: ${origin}`);
+      callback(new Error('不允许的跨域请求'));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
