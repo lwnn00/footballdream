@@ -442,12 +442,92 @@ app.post('/api/register', validateRegister, async (req, res) => {
     );
     
     // 更新邀请码使用记录
-const usedBy = code.used_by || [];
-usedBy.push({
-  username: username,
-  used_at: new Date().toISOString(),
-  user_id: userResult.rows[0].id
-});
+try {
+  console.log('开始更新邀请码使用记录...');
+  
+  // 方法：使用PostgreSQL的jsonb_set函数确保JSON格式正确
+  const updateQuery = `
+    WITH current_data AS (
+      SELECT 
+        code,
+        COALESCE(
+          CASE 
+            WHEN jsonb_typeof(used_by) = 'array' THEN used_by
+            ELSE '[]'::jsonb
+          END,
+          '[]'::jsonb
+        ) as current_used_by
+      FROM invitation_codes 
+      WHERE code = $1
+    )
+    UPDATE invitation_codes ic
+    SET 
+      used_count = ic.used_count + 1,
+      used_by = (
+        SELECT current_used_by || jsonb_build_array(jsonb_build_object(
+          'username', $2,
+          'used_at', $3,
+          'user_id', $4
+        ))
+        FROM current_data
+      ),
+      is_active = CASE WHEN ic.used_count + 1 >= ic.max_uses THEN false ELSE ic.is_active END
+    WHERE ic.code = $1
+    RETURNING ic.code, ic.used_count, ic.used_by;
+  `;
+  
+  const params = [
+    invitationCode,
+    username,
+    new Date().toISOString(),
+    userResult.rows[0].id
+  ];
+  
+  console.log('执行更新查询，参数:', params);
+  
+  const updateResult = await pool.query(updateQuery, params);
+  
+  if (updateResult.rows.length === 0) {
+    throw new Error('邀请码更新失败，未找到匹配的记录');
+  }
+  
+  console.log('邀请码更新成功:', {
+    code: updateResult.rows[0].code,
+    usedCount: updateResult.rows[0].used_count,
+    usedBy: updateResult.rows[0].used_by
+  });
+  
+} catch (error) {
+  console.error('更新邀请码失败:', error);
+  
+  // 备用方案：使用最简单的硬编码JSON
+  console.log('尝试备用更新方案...');
+  
+  const fallbackQuery = `
+    UPDATE invitation_codes 
+    SET used_count = used_count + 1,
+        used_by = jsonb_build_array(
+          jsonb_build_object(
+            'username', $1,
+            'used_at', $2,
+            'user_id', $3
+          )
+        ),
+        is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END
+    WHERE code = $4
+    RETURNING code, used_count;
+  `;
+  
+  const fallbackParams = [
+    username,
+    new Date().toISOString(),
+    userResult.rows[0].id,
+    invitationCode
+  ];
+  
+  const fallbackResult = await pool.query(fallbackQuery, fallbackParams);
+  console.log('备用方案执行结果:', fallbackResult.rows[0]);
+}
 
 await pool.query(
   `UPDATE invitation_codes 
@@ -1248,7 +1328,180 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     // 初始化数据库
-    await initDatabase();
+   // ============ 初始化数据库表（Neon优化版）============
+const initDatabase = async () => {
+  // 在initDatabase函数中添加自动修复
+const autoFixNeonJSON = async () => {
+  try {
+    console.log('正在自动修复Neon数据库JSON数据...');
+    
+    // 修复used_by字段
+    await pool.query(`
+      DO $$
+      BEGIN
+        -- 确保所有used_by字段都是有效的JSON数组
+        UPDATE invitation_codes 
+        SET used_by = '[]'::jsonb 
+        WHERE used_by IS NULL OR jsonb_typeof(used_by) != 'array';
+        
+        -- 设置默认值（如果尚未设置）
+        BEGIN
+          ALTER TABLE invitation_codes 
+          ALTER COLUMN used_by SET DEFAULT '[]'::jsonb;
+        EXCEPTION WHEN OTHERS THEN
+          -- 如果已经设置了默认值，忽略错误
+          RAISE NOTICE 'used_by字段默认值已设置';
+        END;
+      END $$;
+    `);
+    
+    console.log('✅ Neon数据库JSON数据自动修复完成');
+  } catch (error) {
+    console.warn('⚠️ 自动修复失败，但不影响启动:', error.message);
+  }
+};
+
+// 在initDatabase中调用
+const initDatabase = async () => {
+  try {
+    // 先修复数据
+    await autoFixNeonJSON();
+    
+    // 然后继续初始化...
+    // ... 原有的初始化代码
+  } catch (error) {
+    console.error('❌ 数据库初始化失败:', error);
+  }
+};
+  try {
+    console.log('正在初始化Neon数据库表...');
+    
+    // 测试连接
+    const testResult = await pool.query('SELECT version(), current_database()');
+    console.log('Neon数据库信息:', testResult.rows[0]);
+    
+    // 用户表
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(100),
+        password VARCHAR(255) NOT NULL,
+        user_type VARCHAR(20) DEFAULT 'trial',
+        trial_count INTEGER DEFAULT 0,
+        max_trial_count INTEGER DEFAULT 18,
+        trial_end_date TIMESTAMP,
+        registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
+        reset_password_token VARCHAR(255),
+        reset_password_expires TIMESTAMP,
+        invited_by VARCHAR(50),
+        invite_code_used VARCHAR(50),
+        subscription_type VARCHAR(20),
+        subscription_start_date TIMESTAMP,
+        subscription_end_date TIMESTAMP,
+        subscription_active BOOLEAN DEFAULT FALSE,
+        settings JSONB DEFAULT '{"theme":"auto","notifications":true,"language":"zh-CN"}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // 邀请码表 - 确保used_by有默认值
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invitation_codes (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        created_by VARCHAR(50) NOT NULL,
+        created_for VARCHAR(50),
+        max_uses INTEGER DEFAULT 1,
+        used_count INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        expires_at TIMESTAMP,
+        used_by JSONB DEFAULT '[]'::jsonb, -- 明确设置默认值为空数组
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // 记录表、统计表等其他表保持不变...
+    
+    // 创建默认管理员账户
+    const adminCheck = await pool.query(
+      'SELECT id FROM users WHERE username = $1',
+      [process.env.ADMIN_USERNAME || 'admin']
+    );
+    
+    if (adminCheck.rows.length === 0) {
+      const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin123', 12);
+      await pool.query(
+        `INSERT INTO users (username, password, user_type, email, is_active) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          process.env.ADMIN_USERNAME || 'admin',
+          hashedPassword,
+          'admin',
+          'admin@footballbetting.com',
+          true
+        ]
+      );
+      console.log('✅ 默认管理员账户已创建');
+    }
+    
+    // 创建测试邀请码 - 确保used_by字段正确初始化
+    const testCodes = ['TEST123', 'TEST456', 'INVITE789'];
+    for (const code of testCodes) {
+      const codeCheck = await pool.query(
+        'SELECT id FROM invitation_codes WHERE code = $1',
+        [code]
+      );
+      
+      if (codeCheck.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO invitation_codes (code, created_by, is_active, expires_at, used_by) 
+           VALUES ($1, $2, $3, $4, $5)`,
+          [code, 'system', true, new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), '[]']
+        );
+      } else {
+        // 确保现有邀请码的used_by是有效的JSON数组
+        await pool.query(`
+          UPDATE invitation_codes 
+          SET used_by = '[]'::jsonb 
+          WHERE code = $1 AND (used_by IS NULL OR jsonb_typeof(used_by) != 'array')
+        `, [code]);
+      }
+    }
+    
+    console.log('✅ Neon数据库初始化完成');
+    
+  } catch (error) {
+    console.error('❌ Neon数据库初始化失败:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack
+    });
+    
+    // 如果是JSON相关错误，尝试修复
+    if (error.code === '22P02') {
+      console.log('尝试修复JSON数据...');
+      try {
+        await pool.query(`
+          ALTER TABLE invitation_codes 
+          ALTER COLUMN used_by SET DEFAULT '[]'::jsonb;
+          
+          UPDATE invitation_codes 
+          SET used_by = '[]'::jsonb 
+          WHERE used_by IS NULL OR jsonb_typeof(used_by) != 'array';
+        `);
+        console.log('✅ JSON数据修复成功');
+      } catch (fixError) {
+        console.error('JSON数据修复失败:', fixError.message);
+      }
+    }
+  }
+};
     
     // 启动服务器
     app.listen(port, () => {
