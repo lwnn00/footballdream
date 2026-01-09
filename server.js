@@ -592,7 +592,767 @@ app.post('/api/register', validateRegister, async (req, res) => {
     });
   }
 });
+// 6. 获取用户历史记录（需认证）
+app.get('/api/history', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req;
+    const { page = 1, limit = 20, type } = req.query;
+    
+    console.log(`📜 获取用户历史记录: 用户ID=${userId}, 类型=${type || 'all'}`);
+    
+    // 构建查询条件
+    let query = `
+      SELECT r.*, u.username 
+      FROM records r 
+      LEFT JOIN users u ON r.user_id = u.id 
+      WHERE r.user_id = $1
+    `;
+    let queryParams = [userId];
+    
+    // 按类型筛选
+    if (type && ['asian', 'size'].includes(type)) {
+      query += ' AND r.handicap_type = $2';
+      queryParams.push(type);
+    }
+    
+    // 添加排序和分页
+    query += ` ORDER BY r.created_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    queryParams.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
+    
+    const result = await pool.query(query, queryParams);
+    
+    // 获取总数
+    let countQuery = 'SELECT COUNT(*) as total FROM records WHERE user_id = $1';
+    let countParams = [userId];
+    
+    if (type && ['asian', 'size'].includes(type)) {
+      countQuery += ' AND handicap_type = $2';
+      countParams.push(type);
+    }
+    
+    const countResult = await pool.query(countQuery, countParams);
+    
+    res.json({
+      success: true,
+      records: result.rows.map(record => ({
+        id: record.id,
+        match_name: record.match_name,
+        handicap_type: record.handicap_type,
+        initial_handicap: parseFloat(record.initial_handicap),
+        current_handicap: parseFloat(record.current_handicap),
+        initial_water: parseFloat(record.initial_water),
+        current_water: parseFloat(record.current_water),
+        handicap_change: parseFloat(record.handicap_change),
+        water_change: parseFloat(record.water_change),
+        historical_record: record.historical_record,
+        recommendation: record.recommendation,
+        actual_result: record.actual_result,
+        analysis: record.analysis || {},
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+        username: record.username
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(countResult.rows[0].total / parseInt(limit))
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ 获取历史记录出错:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '获取历史记录失败' 
+    });
+  }
+});
 
+// 7. 保存记录（需认证）
+app.post('/api/records', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req;
+    const record = req.body;
+    
+    console.log(`📝 保存记录: 用户ID=${userId}, 赛事=${record.match_name}`);
+    
+    // 验证必填字段
+    const requiredFields = [
+      'match_name', 'handicap_type', 'initial_handicap', 
+      'current_handicap', 'initial_water', 'current_water',
+      'handicap_change', 'water_change', 'historical_record', 'recommendation'
+    ];
+    
+    for (const field of requiredFields) {
+      if (!record[field] && record[field] !== 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `缺少必填字段: ${field}` 
+        });
+      }
+    }
+    
+    // 检查用户是否可以保存记录
+    const userResult = await pool.query(
+      'SELECT user_type, trial_count, max_trial_count FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: '用户不存在' 
+      });
+    }
+    
+    const user = userResult.rows[0];
+    
+    // 试用用户检查次数限制
+    if (user.user_type === 'trial' && user.trial_count >= user.max_trial_count) {
+      return res.status(403).json({ 
+        success: false, 
+        error: '试用次数已用完，请注册成为正式会员' 
+      });
+    }
+    
+    // 插入记录
+    const result = await pool.query(
+      `INSERT INTO records 
+       (user_id, match_name, handicap_type, initial_handicap, current_handicap, 
+        initial_water, current_water, handicap_change, water_change, 
+        historical_record, recommendation, actual_result, analysis) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+       RETURNING id, created_at`,
+      [
+        userId,
+        record.match_name,
+        record.handicap_type,
+        record.initial_handicap,
+        record.current_handicap,
+        record.initial_water,
+        record.current_water,
+        record.handicap_change,
+        record.water_change,
+        record.historical_record,
+        record.recommendation,
+        record.actual_result || null,
+        record.analysis || { probability: 0, confidence: 0, factors: [] }
+      ]
+    );
+    
+    // 更新试用次数（如果是试用用户）
+    if (user.user_type === 'trial') {
+      await pool.query(
+        'UPDATE users SET trial_count = trial_count + 1 WHERE id = $1',
+        [userId]
+      );
+    }
+    
+    console.log(`✅ 记录保存成功: 记录ID=${result.rows[0].id}`);
+    
+    res.status(201).json({
+      success: true,
+      recordId: result.rows[0].id,
+      created_at: result.rows[0].created_at,
+      remainingTrial: user.user_type === 'trial' ? 
+        Math.max(0, user.max_trial_count - user.trial_count - 1) : null,
+      message: '记录保存成功'
+    });
+    
+  } catch (error) {
+    console.error('❌ 保存记录出错:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '保存记录失败' 
+    });
+  }
+});
+
+// 8. 更新记录实际结果（需认证）
+app.put('/api/records/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req;
+    const { actual_result } = req.body;
+    
+    console.log(`✏️ 更新记录: 记录ID=${id}, 实际结果=${actual_result}`);
+    
+    // 检查记录是否存在且属于该用户
+    const recordCheck = await pool.query(
+      'SELECT user_id FROM records WHERE id = $1',
+      [id]
+    );
+    
+    if (recordCheck.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: '记录不存在' 
+      });
+    }
+    
+    if (recordCheck.rows[0].user_id !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        error: '无权修改此记录' 
+      });
+    }
+    
+    // 更新记录
+    await pool.query(
+      'UPDATE records SET actual_result = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [actual_result, id]
+    );
+    
+    console.log(`✅ 记录更新成功: 记录ID=${id}`);
+    
+    res.json({
+      success: true,
+      message: '记录更新成功'
+    });
+    
+  } catch (error) {
+    console.error('❌ 更新记录出错:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '更新记录失败' 
+    });
+  }
+});
+
+// 9. 删除记录（需认证）
+app.delete('/api/records/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req;
+    
+    console.log(`🗑️ 删除记录: 记录ID=${id}`);
+    
+    // 检查记录是否存在且属于该用户
+    const recordCheck = await pool.query(
+      'SELECT user_id FROM records WHERE id = $1',
+      [id]
+    );
+    
+    if (recordCheck.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: '记录不存在' 
+      });
+    }
+    
+    if (recordCheck.rows[0].user_id !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        error: '无权删除此记录' 
+      });
+    }
+    
+    // 删除记录
+    await pool.query('DELETE FROM records WHERE id = $1', [id]);
+    
+    console.log(`✅ 记录删除成功: 记录ID=${id}`);
+    
+    res.json({
+      success: true,
+      message: '记录删除成功'
+    });
+    
+  } catch (error) {
+    console.error('❌ 删除记录出错:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '删除记录失败' 
+    });
+  }
+});
+
+// 10. 让球盘推荐
+app.post('/api/recommend/asian', async (req, res) => {
+  try {
+    const data = req.body;
+    
+    console.log('🎯 计算让球盘推荐:', data.match_name || '未命名赛事');
+    
+    const { 
+      match_name = '未命名赛事',
+      initialHandicap, 
+      currentHandicap, 
+      initialWater, 
+      currentWater, 
+      historicalRecord 
+    } = data;
+    
+    // 验证输入
+    if (initialHandicap === undefined || currentHandicap === undefined ||
+        initialWater === undefined || currentWater === undefined ||
+        !historicalRecord) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必要的输入参数'
+      });
+    }
+    
+    // 简单的推荐算法
+    const handicapChange = parseFloat(currentHandicap) - parseFloat(initialHandicap);
+    const waterChange = parseFloat(currentWater) - parseFloat(initialWater);
+    
+    let recommendation = '上盘';
+    let details = '';
+    let confidence = 75;
+    let factors = [];
+    
+    // 决策逻辑
+    if (handicapChange > 0 && waterChange > 0) {
+      recommendation = '上盘';
+      details = '盘口和水位同时上升，看好上盘';
+      factors = ['盘口上升', '水位上升', '正向变化'];
+      confidence = 85;
+    } else if (handicapChange < 0 && waterChange < 0) {
+      recommendation = '下盘';
+      details = '盘口和水位同时下降，看好下盘';
+      factors = ['盘口下降', '水位下降', '反向变化'];
+      confidence = 80;
+    } else if (parseFloat(currentWater) < 0.85) {
+      recommendation = '上盘';
+      details = '低水位支撑上盘';
+      factors = ['低水位', '市场看好'];
+      confidence = 75;
+    } else if (historicalRecord === 'win') {
+      recommendation = '上盘';
+      details = '历史战绩支持上盘';
+      factors = ['历史战绩', '心理优势'];
+      confidence = 70;
+    } else if (parseFloat(currentHandicap) >= 1.5) {
+      recommendation = '上盘';
+      details = '深盘支持上盘';
+      factors = ['深盘', '实力差距'];
+      confidence = 65;
+    } else {
+      recommendation = '下盘';
+      details = '综合考虑推荐下盘';
+      factors = ['平衡分析', '风险控制'];
+      confidence = 60;
+    }
+    
+    // 计算概率
+    const probability = Math.min(95, Math.max(40, 
+      50 + (handicapChange * 10) + (waterChange * 5) + 
+      (historicalRecord === 'win' ? 15 : -10)
+    ));
+    
+    console.log(`✅ 推荐完成: ${recommendation} (置信度: ${confidence}%)`);
+    
+    res.json({
+      success: true,
+      recommendation,
+      details,
+      analysis: {
+        probability: Math.round(probability),
+        confidence,
+        factors,
+        handicapChange: parseFloat(handicapChange.toFixed(2)),
+        waterChange: parseFloat(waterChange.toFixed(2)),
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ 推荐计算错误:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '推荐计算失败' 
+    });
+  }
+});
+
+// 11. 大小盘推荐
+app.post('/api/recommend/size', async (req, res) => {
+  try {
+    const data = req.body;
+    
+    console.log('🎯 计算大小盘推荐:', data.match_name || '未命名赛事');
+    
+    const { 
+      match_name = '未命名赛事',
+      initialHandicap, 
+      currentHandicap, 
+      initialWater, 
+      currentWater, 
+      historicalRecord 
+    } = data;
+    
+    // 验证输入
+    if (initialHandicap === undefined || currentHandicap === undefined ||
+        initialWater === undefined || currentWater === undefined ||
+        !historicalRecord) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必要的输入参数'
+      });
+    }
+    
+    // 简单的推荐算法
+    const handicapChange = parseFloat(currentHandicap) - parseFloat(initialHandicap);
+    const waterChange = parseFloat(currentWater) - parseFloat(initialWater);
+    
+    let recommendation = '大球';
+    let details = '';
+    let confidence = 70;
+    let factors = [];
+    
+    // 决策逻辑
+    if (handicapChange > 0 && waterChange > 0) {
+      recommendation = '大球';
+      details = '盘口和水位同时上升，看好大球';
+      factors = ['盘口上升', '水位上升', '进攻倾向'];
+      confidence = 80;
+    } else if (handicapChange < 0 && waterChange < 0) {
+      recommendation = '小球';
+      details = '盘口和水位同时下降，看好小球';
+      factors = ['盘口下降', '水位下降', '防守倾向'];
+      confidence = 75;
+    } else if (parseFloat(currentHandicap) > 2.5) {
+      recommendation = '大球';
+      details = '高盘口支撑大球';
+      factors = ['高盘口', '进球预期'];
+      confidence = 70;
+    } else if (historicalRecord === 'win') {
+      recommendation = '大球';
+      details = '历史战绩支持大球';
+      factors = ['历史战绩', '进攻传统'];
+      confidence = 65;
+    } else if (parseFloat(currentWater) < 0.80) {
+      recommendation = '大球';
+      details = '超低水位支撑大球';
+      factors = ['超低水位', '市场预期'];
+      confidence = 60;
+    } else {
+      recommendation = '小球';
+      details = '综合考虑推荐小球';
+      factors = ['平衡分析', '风险控制'];
+      confidence = 55;
+    }
+    
+    // 计算概率
+    const probability = Math.min(95, Math.max(40, 
+      50 + (handicapChange * 8) + (waterChange * 4) + 
+      (historicalRecord === 'win' ? 12 : -8)
+    ));
+    
+    console.log(`✅ 推荐完成: ${recommendation} (置信度: ${confidence}%)`);
+    
+    res.json({
+      success: true,
+      recommendation,
+      details,
+      analysis: {
+        probability: Math.round(probability),
+        confidence,
+        factors,
+        handicapChange: parseFloat(handicapChange.toFixed(2)),
+        waterChange: parseFloat(waterChange.toFixed(2)),
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ 推荐计算错误:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '推荐计算失败' 
+    });
+  }
+});
+
+// 12. 获取统计信息（需认证）
+app.get('/api/stats', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    console.log(`📊 获取用户统计信息: 用户ID=${userId}`);
+    
+    // 获取总记录数
+    const totalResult = await pool.query(
+      'SELECT COUNT(*) as count FROM records WHERE user_id = $1',
+      [userId]
+    );
+    
+    // 获取胜率统计
+    const winRateResult = await pool.query(
+      `SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as wins
+       FROM records 
+       WHERE user_id = $1 AND actual_result IS NOT NULL`,
+      [userId]
+    );
+    
+    // 获取不同类型胜率
+    const typeResult = await pool.query(
+      `SELECT 
+        handicap_type,
+        COUNT(*) as total,
+        SUM(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as wins
+       FROM records 
+       WHERE user_id = $1 AND actual_result IS NOT NULL
+       GROUP BY handicap_type`,
+      [userId]
+    );
+    
+    // 获取变化胜率
+    const changeResult = await pool.query(
+      `SELECT 
+        SUM(CASE WHEN water_change > 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as water_up_wins,
+        SUM(CASE WHEN water_change > 0 THEN 1 ELSE 0 END) as water_up_total,
+        SUM(CASE WHEN water_change < 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as water_down_wins,
+        SUM(CASE WHEN water_change < 0 THEN 1 ELSE 0 END) as water_down_total,
+        SUM(CASE WHEN handicap_change > 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as handicap_up_wins,
+        SUM(CASE WHEN handicap_change > 0 THEN 1 ELSE 0 END) as handicap_up_total,
+        SUM(CASE WHEN handicap_change < 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as handicap_down_wins,
+        SUM(CASE WHEN handicap_change < 0 THEN 1 ELSE 0 END) as handicap_down_total,
+        SUM(CASE WHEN current_water < 0.90 AND actual_result = 'win' THEN 1 ELSE 0 END) as low_water_wins,
+        SUM(CASE WHEN current_water < 0.90 THEN 1 ELSE 0 END) as low_water_total
+       FROM records 
+       WHERE user_id = $1 AND actual_result IS NOT NULL`,
+      [userId]
+    );
+    
+    const total = parseInt(totalResult.rows[0].count);
+    const winRate = winRateResult.rows[0].total > 0 ? 
+      Math.round((winRateResult.rows[0].wins / winRateResult.rows[0].total) * 100) : 0;
+    
+    const typeStats = {};
+    typeResult.rows.forEach(row => {
+      typeStats[row.handicap_type] = row.total > 0 ? 
+        Math.round((row.wins / row.total) * 100) : 0;
+    });
+    
+    const changeData = changeResult.rows[0];
+    
+    console.log(`✅ 统计信息获取完成: 总记录=${total}, 胜率=${winRate}%`);
+    
+    res.json({
+      success: true,
+      stats: {
+        totalRecords: total,
+        winRate: winRate,
+        asianWinRate: typeStats.asian || 0,
+        sizeWinRate: typeStats.size || 0,
+        waterUpWinRate: changeData.water_up_total > 0 ? 
+          Math.round((changeData.water_up_wins / changeData.water_up_total) * 100) : 0,
+        waterDownWinRate: changeData.water_down_total > 0 ? 
+          Math.round((changeData.water_down_wins / changeData.water_down_total) * 100) : 0,
+        handicapUpWinRate: changeData.handicap_up_total > 0 ? 
+          Math.round((changeData.handicap_up_wins / changeData.handicap_up_total) * 100) : 0,
+        handicapDownWinRate: changeData.handicap_down_total > 0 ? 
+          Math.round((changeData.handicap_down_wins / changeData.handicap_down_total) * 100) : 0,
+        lowWaterWinRate: changeData.low_water_total > 0 ? 
+          Math.round((changeData.low_water_wins / changeData.low_water_total) * 100) : 0
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ 获取统计信息出错:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '获取统计信息失败' 
+    });
+  }
+});
+
+// 13. 同步本地数据（需认证）
+app.post('/api/sync', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req;
+    const { records = [] } = req.body;
+    
+    console.log(`🔄 同步数据: 用户ID=${userId}, 记录数=${records.length}`);
+    
+    const synced = [];
+    const errors = [];
+    
+    for (const record of records) {
+      try {
+        // 检查是否已存在（通过设备ID或时间戳）
+        const existing = await pool.query(
+          'SELECT id FROM records WHERE user_id = $1 AND device_id = $2',
+          [userId, record.deviceId]
+        );
+        
+        if (existing.rows.length === 0) {
+          // 插入新记录
+          const result = await pool.query(
+            `INSERT INTO records 
+             (user_id, match_name, handicap_type, initial_handicap, current_handicap, 
+              initial_water, current_water, handicap_change, water_change, 
+              historical_record, recommendation, actual_result, device_id, is_synced) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true) 
+             RETURNING id`,
+            [
+              userId,
+              record.match_name,
+              record.handicap_type,
+              record.initial_handicap,
+              record.current_handicap,
+              record.initial_water,
+              record.current_water,
+              record.handicap_change,
+              record.water_change,
+              record.historical_record,
+              record.recommendation,
+              record.actual_result || '',
+              record.deviceId || 'local'
+            ]
+          );
+          
+          synced.push({ id: result.rows[0].id, deviceId: record.deviceId });
+        } else {
+          // 更新现有记录
+          await pool.query(
+            `UPDATE records SET 
+              match_name = $1, handicap_type = $2, initial_handicap = $3, current_handicap = $4,
+              initial_water = $5, current_water = $6, handicap_change = $7, water_change = $8,
+              historical_record = $9, recommendation = $10, actual_result = $11, is_synced = true,
+              updated_at = CURRENT_TIMESTAMP
+             WHERE id = $12`,
+            [
+              record.match_name,
+              record.handicap_type,
+              record.initial_handicap,
+              record.current_handicap,
+              record.initial_water,
+              record.current_water,
+              record.handicap_change,
+              record.water_change,
+              record.historical_record,
+              record.recommendation,
+              record.actual_result || '',
+              existing.rows[0].id
+            ]
+          );
+          
+          synced.push({ id: existing.rows[0].id, deviceId: record.deviceId });
+        }
+      } catch (error) {
+        errors.push({ deviceId: record.deviceId, error: error.message });
+        console.error(`同步记录失败: ${record.deviceId}`, error);
+      }
+    }
+    
+    console.log(`✅ 同步完成: 成功=${synced.length}, 失败=${errors.length}`);
+    
+    res.json({
+      success: true,
+      synced,
+      errors,
+      message: `成功同步 ${synced.length} 条记录`
+    });
+    
+  } catch (error) {
+    console.error('❌ 同步数据出错:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '同步数据失败' 
+    });
+  }
+});
+
+// 14. 获取所有用户的记录（管理员功能）
+app.get('/api/admin/records', authenticateAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, username, type, startDate, endDate } = req.query;
+    
+    console.log('👨‍💼 管理员获取所有记录');
+    
+    let query = `
+      SELECT r.*, u.username 
+      FROM records r 
+      JOIN users u ON r.user_id = u.id 
+      WHERE 1=1
+    `;
+    let queryParams = [];
+    
+    // 按用户名筛选
+    if (username) {
+      query += ' AND u.username ILIKE $' + (queryParams.length + 1);
+      queryParams.push(`%${username}%`);
+    }
+    
+    // 按类型筛选
+    if (type && ['asian', 'size'].includes(type)) {
+      query += ' AND r.handicap_type = $' + (queryParams.length + 1);
+      queryParams.push(type);
+    }
+    
+    // 按日期筛选
+    if (startDate) {
+      query += ' AND r.created_at >= $' + (queryParams.length + 1);
+      queryParams.push(startDate);
+    }
+    
+    if (endDate) {
+      query += ' AND r.created_at <= $' + (queryParams.length + 1);
+      queryParams.push(endDate);
+    }
+    
+    // 添加排序和分页
+    query += ` ORDER BY r.created_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    queryParams.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
+    
+    const result = await pool.query(query, queryParams);
+    
+    // 获取总数
+    let countQuery = `
+      SELECT COUNT(*) as total 
+      FROM records r 
+      JOIN users u ON r.user_id = u.id 
+      WHERE 1=1
+    `;
+    let countParams = [];
+    
+    // 同样的筛选条件
+    if (username) {
+      countQuery += ' AND u.username ILIKE $' + (countParams.length + 1);
+      countParams.push(`%${username}%`);
+    }
+    
+    if (type && ['asian', 'size'].includes(type)) {
+      countQuery += ' AND r.handicap_type = $' + (countParams.length + 1);
+      countParams.push(type);
+    }
+    
+    if (startDate) {
+      countQuery += ' AND r.created_at >= $' + (countParams.length + 1);
+      countParams.push(startDate);
+    }
+    
+    if (endDate) {
+      countQuery += ' AND r.created_at <= $' + (countParams.length + 1);
+      countParams.push(endDate);
+    }
+    
+    const countResult = await pool.query(countQuery, countParams);
+    
+    res.json({
+      success: true,
+      records: result.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(countResult.rows[0].total / parseInt(limit))
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ 管理员获取记录出错:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '获取记录失败' 
+    });
+  }
+});
 // 4. 用户登录
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
