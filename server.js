@@ -291,7 +291,7 @@ const authenticateToken = async (req, res, next) => {
             });
         }
         
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || '0UdwoIzW/8IzdWSZLa+VP+nLKV1OQKNAOi2PbXMF+pA=');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
         req.userId = decoded.userId;
         next();
     } catch (error) {
