@@ -200,55 +200,24 @@ const initDatabase = async () => {
 // 生产环境：应该指定具体来源
 const corsOptions = {
   origin: function (origin, callback) {
-    // 允许所有来源（开发环境）
+    // 开发环境：允许所有来源
     if (process.env.NODE_ENV !== 'production') {
       callback(null, true);
       return;
     }
     
-    // 生产环境：只允许特定来源
-    if (!origin) {
+    // 生产环境：允许所有 Vercel 域名
+    if (!origin || 
+        origin.includes('vercel.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1') ||
+        origin.includes('lwnn00.github.io')) {
       callback(null, true);
     } else {
-      const allowedOrigins = [
-        'https://footballdream.vercel.app',
-        'https://backenbsfootball.vercel.app',
-        'https://lwnn00.github.io/footballdream'
-      ];
-      
-      if (allowedOrigins.includes(origin) || 
-          origin.includes('vercel.app') ||
-          origin.includes('localhost')) {
-        callback(null, true);
-      } else {
-        console.log(`CORS拒绝: ${origin}`);
-        callback(new Error('不允许的跨域请求'));
-      }
+      console.log(`CORS拒绝: ${origin}`);
+      callback(new Error('不允许的跨域请求'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers',
-    'X-API-Key',
-    'X-Auth-Token'
-  ],
-  exposedHeaders: [
-    'Content-Range', 
-    'X-Content-Range',
-    'X-Total-Count',
-    'Link'
-  ],
-  credentials: true,
-  maxAge: 86400, // 预检请求缓存时间（秒）
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-};
 
 // 应用CORS中间件
 app.use(cors(corsOptions));
