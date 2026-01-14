@@ -320,8 +320,57 @@ const authenticateToken = async (req, res, next) => {
         });
     }
 };
+const authenticateAdmin = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ 
+        success: false, 
+        error: '未提供认证令牌' 
+      });
+    }
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
+    req.userId = decoded.userId;
+    
+    // 检查是否为管理员
+    const userResult = await pool.query(
+      'SELECT user_type FROM users WHERE id = $1',
+      [req.userId]
+    );
+    
+    if (userResult.rows.length === 0 || userResult.rows[0].user_type !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        error: '需要管理员权限' 
+      });
+    }
+    
+    next();
+  } catch (error) {
+    return res.status(403).json({ 
+      success: false, 
+      error: '无效的认证令牌' 
+    });
+  }
+};
+// 应用中间件
+app.use(helmet({
+  // 根据前端需要调整Helmet设置
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: false
+}));
 
+app.use(cors(corsOptions));
+app.options('*', cors());
 
+// 请求体解析
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============ 工具函数 ============
 const generateToken = (userId) => {
