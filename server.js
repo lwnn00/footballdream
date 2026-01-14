@@ -277,50 +277,51 @@ app.use((req, res, next) => {
 });
 
 // ============ 认证中间件 ============
+// 在 server.js 中，修改 authenticateToken 中间件：
 const authenticateToken = async (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ success: false, error: '未提供认证令牌' });
+    try {
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+        
+        if (!token) {
+            return res.status(401).json({ 
+                success: false, 
+                error: '需要认证令牌',
+                code: 'MISSING_TOKEN'
+            });
+        }
+        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || '0UdwoIzW/8IzdWSZLa+VP+nLKV1OQKNAOi2PbXMF+pA=');
+        req.userId = decoded.userId;
+        next();
+    } catch (error) {
+        console.error('认证错误:', error.message);
+        
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ 
+                success: false, 
+                error: '令牌已过期',
+                code: 'TOKEN_EXPIRED'
+            });
+        }
+        
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(403).json({ 
+                success: false, 
+                error: '无效的认证令牌',
+                code: 'INVALID_TOKEN'
+            });
+        }
+        
+        return res.status(403).json({ 
+            success: false, 
+            error: '认证失败',
+            code: 'AUTH_FAILED'
+        });
     }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
-    req.userId = decoded.userId;
-    next();
-  } catch (error) {
-    return res.status(403).json({ success: false, error: '无效的认证令牌' });
-  }
 };
 
-const authenticateAdmin = async (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ success: false, error: '未提供认证令牌' });
-    }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
-    req.userId = decoded.userId;
-    
-    // 检查是否为管理员
-    const userResult = await pool.query(
-      'SELECT user_type FROM users WHERE id = $1',
-      [req.userId]
-    );
-    
-    if (userResult.rows.length === 0 || userResult.rows[0].user_type !== 'admin') {
-      return res.status(403).json({ success: false, error: '需要管理员权限' });
-    }
-    
-    next();
-  } catch (error) {
-    return res.status(403).json({ success: false, error: '无效的认证令牌' });
-  }
-};
+
 
 // ============ 工具函数 ============
 const generateToken = (userId) => {
@@ -644,57 +645,49 @@ app.post('/api/invitation-codes', authenticateAdmin, async (req, res) => {
     });
   }
 });
-app.get('/api/auth/status', (req, res) => {
-  const authHeader = req.headers['authorization'];
-  console.log('接收到的认证头:', authHeader);
-  
-  res.json({
-    hasAuthHeader: !!authHeader,
-    authHeader: authHeader,
-    timestamp: new Date().toISOString()
-  });
-});
+
+// 6. 获取用户历史记录
 // 6. 获取用户历史记录
 app.get('/api/history', authenticateToken, async (req, res) => {
-  try {
-    const { userId } = req;
-    
-    const result = await pool.query(
-      `SELECT r.*, u.username 
-       FROM records r 
-       LEFT JOIN users u ON r.user_id = u.id 
-       WHERE r.user_id = $1 
-       ORDER BY r.created_at DESC`,
-      [userId]
-    );
-    
-    res.json({
-      success: true,
-      records: result.rows.map(record => ({
-        id: record.id,
-        match_name: record.match_name,
-        handicap_type: record.handicap_type,
-        initial_handicap: parseFloat(record.initial_handicap),
-        current_handicap: parseFloat(record.current_handicap),
-        initial_water: parseFloat(record.initial_water),
-        current_water: parseFloat(record.current_water),
-        handicap_change: parseFloat(record.handicap_change),
-        water_change: parseFloat(record.water_change),
-        historical_record: record.historical_record,
-        recommendation: record.recommendation,
-        actual_result: record.actual_result,
-        created_at: record.created_at,
-        username: record.username
-      }))
-    });
-    
-  } catch (error) {
-    console.error('获取历史记录错误:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '服务器内部错误' 
-    });
-  }
+    try {
+        const { userId } = req; // 从认证令牌中获取用户ID
+        
+        const result = await pool.query(
+            `SELECT r.*, u.username 
+             FROM records r 
+             LEFT JOIN users u ON r.user_id = u.id 
+             WHERE r.user_id = $1 
+             ORDER BY r.created_at DESC`,
+            [userId] // 使用从令牌中获取的用户ID
+        );
+        
+        res.json({
+            success: true,
+            records: result.rows.map(record => ({
+                id: record.id,
+                match_name: record.match_name,
+                handicap_type: record.handicap_type,
+                initial_handicap: parseFloat(record.initial_handicap),
+                current_handicap: parseFloat(record.current_handicap),
+                initial_water: parseFloat(record.initial_water),
+                current_water: parseFloat(record.current_water),
+                handicap_change: parseFloat(record.handicap_change),
+                water_change: parseFloat(record.water_change),
+                historical_record: record.historical_record,
+                recommendation: record.recommendation,
+                actual_result: record.actual_result,
+                created_at: record.created_at,
+                username: record.username
+            }))
+        });
+        
+    } catch (error) {
+        console.error('获取历史记录错误:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: '服务器内部错误' 
+        });
+    }
 });
 
 // 7. 保存记录
