@@ -696,10 +696,13 @@ app.post('/api/invitation-codes', authenticateAdmin, async (req, res) => {
 });
 
 // 6. 获取用户历史记录
+
 // 6. 获取用户历史记录
 app.get('/api/history', authenticateToken, async (req, res) => {
     try {
         const { userId } = req; // 从认证令牌中获取用户ID
+        
+        console.log(`获取用户 ${userId} 的历史记录`);
         
         const result = await pool.query(
             `SELECT r.*, u.username 
@@ -707,8 +710,10 @@ app.get('/api/history', authenticateToken, async (req, res) => {
              LEFT JOIN users u ON r.user_id = u.id 
              WHERE r.user_id = $1 
              ORDER BY r.created_at DESC`,
-            [userId] // 使用从令牌中获取的用户ID
+            [userId]
         );
+        
+        console.log(`为用户 ${userId} 找到 ${result.rows.length} 条记录`);
         
         res.json({
             success: true,
