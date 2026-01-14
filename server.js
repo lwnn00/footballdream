@@ -644,7 +644,16 @@ app.post('/api/invitation-codes', authenticateAdmin, async (req, res) => {
     });
   }
 });
-
+app.get('/api/auth/status', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  console.log('接收到的认证头:', authHeader);
+  
+  res.json({
+    hasAuthHeader: !!authHeader,
+    authHeader: authHeader,
+    timestamp: new Date().toISOString()
+  });
+});
 // 6. 获取用户历史记录
 app.get('/api/history', authenticateToken, async (req, res) => {
   try {
