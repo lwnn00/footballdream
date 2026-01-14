@@ -195,16 +195,6 @@ const initDatabase = async () => {
     console.error('❌ 数据库初始化失败:', error);
   }
 };
-
-// ============ 中间件 ============
-app.use(helmet({
-  // 根据前端需要调整Helmet设置
-  contentSecurityPolicy: false, // 暂时禁用CSP，避免前端资源被阻止
-  crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginOpenerPolicy: false
-}));
-
 // ============ CORS配置 ============
 // 开发环境：允许所有来源
 // 生产环境：应该指定具体来源
@@ -264,7 +254,17 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // 处理预检请求
-app.options('*', cors(corsOptions));
+app.options('*', cors());
+// ============ 中间件 ============
+app.use(helmet({
+  // 根据前端需要调整Helmet设置
+  contentSecurityPolicy: false, // 暂时禁用CSP，避免前端资源被阻止
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: false
+}));
+
+
 
 // 请求体解析
 app.use(express.json({ limit: '10mb' }));
