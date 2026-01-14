@@ -200,24 +200,55 @@ const initDatabase = async () => {
 // 生产环境：应该指定具体来源
 const corsOptions = {
   origin: function (origin, callback) {
-    // 开发环境：允许所有来源
+    // 允许所有来源（开发环境）
     if (process.env.NODE_ENV !== 'production') {
       callback(null, true);
       return;
     }
     
-    // 生产环境：允许所有 Vercel 域名
-    if (!origin || 
-        origin.includes('vercel.app') ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1') ||
-        origin.includes('lwnn00.github.io')) {
+    // 生产环境：只允许特定来源
+    if (!origin) {
       callback(null, true);
     } else {
-      console.log(`CORS拒绝: ${origin}`);
-      callback(new Error('不允许的跨域请求'));
+      const allowedOrigins = [
+        'https://footballdream.vercel.app',
+        'https://backenbsfootball.vercel.app',
+        'https://lwnn00.github.io/footballdream'
+      ];
+      
+      if (allowedOrigins.includes(origin) || 
+          origin.includes('vercel.app') ||
+          origin.includes('localhost')) {
+        callback(null, true);
+      } else {
+        console.log(`CORS拒绝: ${origin}`);
+        callback(new Error('不允许的跨域请求'));
+      }
     }
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers',
+    'X-API-Key',
+    'X-Auth-Token'
+  ],
+  exposedHeaders: [
+    'Content-Range', 
+    'X-Content-Range',
+    'X-Total-Count',
+    'Link'
+  ],
+  credentials: true,
+  maxAge: 86400, // 预检请求缓存时间（秒）
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
 
 // 应用CORS中间件
 app.use(cors(corsOptions));
@@ -665,13 +696,10 @@ app.post('/api/invitation-codes', authenticateAdmin, async (req, res) => {
 });
 
 // 6. 获取用户历史记录
-
 // 6. 获取用户历史记录
 app.get('/api/history', authenticateToken, async (req, res) => {
     try {
         const { userId } = req; // 从认证令牌中获取用户ID
-        
-        console.log(`获取用户 ${userId} 的历史记录`);
         
         const result = await pool.query(
             `SELECT r.*, u.username 
@@ -679,10 +707,8 @@ app.get('/api/history', authenticateToken, async (req, res) => {
              LEFT JOIN users u ON r.user_id = u.id 
              WHERE r.user_id = $1 
              ORDER BY r.created_at DESC`,
-            [userId]
+            [userId] // 使用从令牌中获取的用户ID
         );
-        
-        console.log(`为用户 ${userId} 找到 ${result.rows.length} 条记录`);
         
         res.json({
             success: true,
