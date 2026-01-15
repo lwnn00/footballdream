@@ -276,6 +276,7 @@ app.use((req, res, next) => {
   next();
 });
 
+// ============ 认证中间件 ============
 // ============ 认证中间件 ============ 
 const authenticateToken = async (req, res, next) => {
     try {
@@ -330,6 +331,34 @@ const authenticateToken = async (req, res, next) => {
             code: 'AUTH_FAILED'
         });
     }
+};
+
+const authenticateAdmin = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ success: false, error: '未提供认证令牌' });
+    }
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
+    req.userId = decoded.userId;
+    
+    // 检查是否为管理员
+    const userResult = await pool.query(
+      'SELECT user_type FROM users WHERE id = $1',
+      [req.userId]
+    );
+    
+    if (userResult.rows.length === 0 || userResult.rows[0].user_type !== 'admin') {
+      return res.status(403).json({ success: false, error: '需要管理员权限' });
+    }
+    
+    next();
+  } catch (error) {
+    return res.status(403).json({ success: false, error: '无效的认证令牌' });
+  }
 };
 
 // ============ 工具函数 ============
