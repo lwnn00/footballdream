@@ -79,45 +79,47 @@ const initDatabase = async () => {
     `);
     
     // 邀请码表
-   // await pool.query(`
-     // CREATE TABLE IF NOT EXISTS invitation_codes (
-       // id SERIAL PRIMARY KEY,
- //       code VARCHAR(50) UNIQUE NOT NULL,
- //       created_by VARCHAR(50) NOT NULL,
-  //      created_for VARCHAR(50),
-    //    max_uses INTEGER DEFAULT 1,
-  //      used_count INTEGER DEFAULT 0,
- //       is_active BOOLEAN DEFAULT TRUE,
-//        expires_at TIMESTAMP,
- //       used_by JSONB,
- //       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
- //       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
- //     )
-  //  `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invitation_codes (
+        id SERIAL PRIMARY KEY,
+       code VARCHAR(50) UNIQUE NOT NULL,
+      created_by VARCHAR(50) NOT NULL,
+        created_for VARCHAR(50),
+        max_uses INTEGER DEFAULT 1,
+        used_count INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        expires_at TIMESTAMP,
+        used_by JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     )
+    `);
     // 邀请码申请表
 await pool.query(`
-  CREATE TABLE IF NOT EXISTS invitation_applications (
-    id SERIAL PRIMARY KEY,
-    application_id VARCHAR(50) UNIQUE NOT NULL,
-    username VARCHAR(100) NOT NULL,
-    email VARCHAR(200),
-    purpose VARCHAR(50) NOT NULL,
-    notes TEXT,
-    status VARCHAR(20) DEFAULT 'pending',
-    review_notes TEXT,
-    reviewed_by INTEGER REFERENCES users(id),
-    reviewed_at TIMESTAMP,
-    generated_code VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
+    CREATE TABLE IF NOT EXISTS invitation_applications (
+        id SERIAL PRIMARY KEY,
+        application_id VARCHAR(50) UNIQUE NOT NULL,
+        username VARCHAR(100) NOT NULL,
+        email VARCHAR(200),
+        purpose VARCHAR(50) NOT NULL,
+        notes TEXT,
+        status VARCHAR(20) DEFAULT 'pending',
+        review_notes TEXT,
+        reviewed_by INTEGER REFERENCES users(id),
+        reviewed_at TIMESTAMP,
+        generated_code VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CHECK (status IN ('pending', 'completed', 'rejected'))
+    )
 `);
 
 // 为申请表创建索引
 await pool.query(`
-  CREATE INDEX IF NOT EXISTS idx_invitation_applications_status ON invitation_applications(status);
-  CREATE INDEX IF NOT EXISTS idx_invitation_applications_created_at ON invitation_applications(created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_invitation_applications_username ON invitation_applications(username);
+    CREATE INDEX IF NOT EXISTS idx_invitation_applications_status ON invitation_applications(status);
+    CREATE INDEX IF NOT EXISTS idx_invitation_applications_created_at ON invitation_applications(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_invitation_applications_username ON invitation_applications(username);
+    CREATE INDEX IF NOT EXISTS idx_invitation_applications_application_id ON invitation_applications(application_id);
 `);
     // 记录表
     await pool.query(`
@@ -402,7 +404,6 @@ const generateInvitationCode = () => {
   }
   return code;
 };
-
 // 验证邮箱格式
 const isValidEmail = (email) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -413,6 +414,7 @@ const isValidEmail = (email) => {
 const isValidInvitationCode = (code) => {
   return /^[A-Z0-9]{6,12}$/.test(code);
 };
+
 const validateRegister = (req, res, next) => {
   const { username, password, invitationCode } = req.body;
   
@@ -557,484 +559,146 @@ app.post('/api/register', validateRegister, async (req, res) => {
     });
   }
 });
-// 1. 申请邀请码（公共接口，无需认证）
-app.post('/api/apply-invitation', async (req, res) => {
-  try {
-    const { username, email, purpose, notes } = req.body;
-    
-    console.log('收到邀请码申请:', { username, email, purpose });
-    
-    // 验证必填字段
-    if (!username) {
-      return res.status(400).json({
-        success: false,
-        error: '用户名不能为空'
-      });
-    }
-    
-    if (!purpose) {
-      return res.status(400).json({
-        success: false,
-        error: '请选择使用目的'
-      });
-    }
-    
-    // 验证用户名格式
-    if (username.length < 2 || username.length > 50) {
-      return res.status(400).json({
-        success: false,
-        error: '用户名长度应在2-50个字符之间'
-      });
-    }
-    
-    if (email && !isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        error: '邮箱格式不正确'
-      });
-    }
-    
-    // 检查该用户名是否已申请过
-    const existingApplication = await pool.query(
-      `SELECT id FROM invitation_applications WHERE username = $1`,
-      [username]
-    );
-    
-    if (existingApplication.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: '该用户名已申请过邀请码'
-      });
-    }
-    
-    // 生成唯一的申请ID
-    const applicationId = `APP${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-    
-    // 创建申请记录
-    await pool.query(
-      `INSERT INTO invitation_applications 
-       (application_id, username, email, purpose, notes, status, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        applicationId,
-        username,
-        email || null,
-        purpose,
-        notes || '',
-        'pending', // pending, approved, rejected, completed
-        new Date().toISOString()
-      ]
-    );
-    
-    console.log(`邀请码申请已记录: ${applicationId} - ${username}`);
-    
-    res.status(201).json({
-      success: true,
-      message: '申请已提交，请等待管理员审核',
-      data: {
-        applicationId: applicationId,
-        username: username,
-        status: 'pending',
-        submittedAt: new Date().toISOString()
-      }
-    });
-    
-  } catch (error) {
-    console.error('申请邀请码错误:', error);
-    res.status(500).json({
-      success: false,
-      error: '服务器内部错误'
-    });
-  }
-});
 
-// 2. 获取邀请码申请列表（需要管理员权限）
-app.get('/api/invitation-applications', authenticateAdmin, async (req, res) => {
-  try {
-    const { status, page = 1, limit = 20 } = req.query;
-    
-    let query = `
-      SELECT 
-        id, application_id, username, email, purpose, notes, 
-        status, review_notes, reviewed_by, reviewed_at, 
-        created_at, updated_at
-      FROM invitation_applications 
-      WHERE 1=1
-    `;
-    
-    const params = [];
-    let paramCount = 0;
-    
-    if (status) {
-      paramCount++;
-      query += ` AND status = $${paramCount}`;
-      params.push(status);
-    }
-    
-    query += ` ORDER BY created_at DESC`;
-    
-    // 添加分页
-    if (limit) {
-      paramCount++;
-      query += ` LIMIT $${paramCount}`;
-      params.push(parseInt(limit));
-      
-      if (page > 1) {
-        paramCount++;
-        query += ` OFFSET $${paramCount}`;
-        params.push((parseInt(page) - 1) * parseInt(limit));
-      }
-    }
-    
-    const result = await pool.query(query, params);
-    
-    // 获取总数
-    const countQuery = `
-      SELECT COUNT(*) as total 
-      FROM invitation_applications 
-      ${status ? 'WHERE status = $1' : ''}
-    `;
-    const countParams = status ? [status] : [];
-    const countResult = await pool.query(countQuery, countParams);
-    
-    res.json({
-      success: true,
-      applications: result.rows,
-      pagination: {
-        total: parseInt(countResult.rows[0].total),
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(parseInt(countResult.rows[0].total) / parseInt(limit))
-      }
-    });
-    
-  } catch (error) {
-    console.error('获取申请列表错误:', error);
-    res.status(500).json({
-      success: false,
-      error: '服务器内部错误'
-    });
-  }
-});
 
-// 3. 审核邀请码申请（需要管理员权限）
-app.post('/api/invitation-applications/:id/review', authenticateAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, reviewNotes, generateCode = true } = req.body;
-    const adminId = req.userId;
-    
-    if (!status || !['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        error: '状态必须是 approved 或 rejected'
-      });
-    }
-    
-    // 获取申请信息
-    const applicationResult = await pool.query(
-      `SELECT * FROM invitation_applications WHERE id = $1`,
-      [id]
-    );
-    
-    if (applicationResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: '申请不存在'
-      });
-    }
-    
-    const application = applicationResult.rows[0];
-    
-    // 更新申请状态
-    await pool.query(
-      `UPDATE invitation_applications 
-       SET status = $1, review_notes = $2, reviewed_by = $3, reviewed_at = $4, updated_at = $5
-       WHERE id = $6`,
-      [
-        status,
-        reviewNotes || '',
-        adminId,
-        new Date().toISOString(),
-        new Date().toISOString(),
-        id
-      ]
-    );
-    
-    let generatedCode = null;
-    
-    // 如果批准并需要生成邀请码
-    if (status === 'approved' && generateCode) {
-      // 生成邀请码
-      generatedCode = generateInvitationCode();
-      
-      // 保存到邀请码表
-      await pool.query(
-        `INSERT INTO invitation_codes 
-         (code, created_by, created_for, is_active, expires_at) 
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          generatedCode,
-          `admin_${adminId}`,
-          application.username,
-          true,
-          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30天后过期
-        ]
-      );
-      
-      // 更新申请记录，标记为已完成
-      await pool.query(
-        `UPDATE invitation_applications 
-         SET status = 'completed', generated_code = $1 
-         WHERE id = $2`,
-        [generatedCode, id]
-      );
-    }
-    
-    res.json({
-      success: true,
-      message: `申请已${status === 'approved' ? '批准' : '拒绝'}`,
-      data: {
-        applicationId: application.application_id,
-        status: status,
-        generatedCode: generatedCode,
-        reviewNotes: reviewNotes || '',
-        reviewedAt: new Date().toISOString()
-      }
-    });
-    
-  } catch (error) {
-    console.error('审核申请错误:', error);
-    res.status(500).json({
-      success: false,
-      error: '服务器内部错误'
-    });
-  }
-});
+// ============ 邀请码申请相关API ============ //
 
-// 4. 批量生成邀请码（需要管理员权限）
-app.post('/api/admin/generate-codes', authenticateAdmin, async (req, res) => {
-  try {
-    const { count = 10, createdBy = '管理员', purpose = '批量生成', format = 'json' } = req.body;
-    
-    if (count < 1 || count > 100) {
-      return res.status(400).json({
-        success: false,
-        error: '生成数量必须在1-100之间'
-      });
-    }
-    
-    const generatedCodes = [];
-    
-    for (let i = 0; i < count; i++) {
-      let code;
-      let isUnique = false;
-      
-      // 确保邀请码唯一
-      while (!isUnique) {
-        code = generateInvitationCode();
-        const existing = await pool.query(
-          'SELECT id FROM invitation_codes WHERE code = $1',
-          [code]
+// 3. 申请邀请码（公共接口）
+app.post('/api/invitation/apply', async (req, res) => {
+    try {
+        console.log('📨 收到邀请码申请请求:', req.body);
+        
+        const { username, email, purpose, notes } = req.body;
+        
+        // 验证必填字段
+        if (!username || !purpose) {
+            return res.status(400).json({
+                success: false,
+                error: '用户名和使用目的是必填项'
+            });
+        }
+        
+        // 验证用户名格式
+        if (username.length < 2 || username.length > 50) {
+            return res.status(400).json({
+                success: false,
+                error: '用户名长度应在2-50个字符之间'
+            });
+        }
+        
+        // 验证邮箱格式（如果提供了邮箱）
+        if (email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({
+                    success: false,
+                    error: '邮箱格式不正确'
+                });
+            }
+        }
+        
+        // 检查是否已存在相同用户名的申请（最近7天内）
+        const recentApplication = await pool.query(
+            `SELECT id, created_at FROM invitation_applications 
+             WHERE username = $1 AND created_at > NOW() - INTERVAL '7 days'`,
+            [username]
         );
-        isUnique = existing.rows.length === 0;
-      }
-      
-      // 保存到数据库
-      await pool.query(
-        `INSERT INTO invitation_codes 
-         (code, created_by, is_active, expires_at) 
-         VALUES ($1, $2, $3, $4)`,
-        [
-          code,
-          createdBy,
-          true,
-          new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) // 90天后过期
-        ]
-      );
-      
-      generatedCodes.push({
-        code: code,
-        created_by: createdBy,
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
-      });
+        
+        if (recentApplication.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: '该用户名在7天内已提交过申请'
+            });
+        }
+        
+        // 生成申请ID
+        const applicationId = `APP${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+        
+        // 插入申请记录
+        const result = await pool.query(
+            `INSERT INTO invitation_applications 
+             (application_id, username, email, purpose, notes, status) 
+             VALUES ($1, $2, $3, $4, $5, $6) 
+             RETURNING id, application_id, username, email, purpose, notes, 
+                       status, created_at`,
+            [applicationId, username, email || null, purpose, notes || '', 'pending']
+        );
+        
+        const application = result.rows[0];
+        
+        console.log(`✅ 申请已保存: ${applicationId} - ${username}`);
+        
+        res.status(201).json({
+            success: true,
+            message: '申请提交成功！请等待管理员审核。',
+            application: {
+                id: application.application_id,
+                username: application.username,
+                email: application.email,
+                purpose: application.purpose,
+                status: application.status,
+                created_at: application.created_at
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ 处理申请错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '服务器内部错误',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
-    
-    // 根据格式返回
-    let responseData = {
-      success: true,
-      message: `成功生成 ${count} 个邀请码`,
-      codes: generatedCodes
-    };
-    
-    // 如果需要文件格式，添加下载链接
-    if (format === 'file') {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `invitation-codes-${timestamp}.json`;
-      
-      // 在实际应用中，这里应该将文件保存到服务器并返回下载链接
-      responseData.download = {
-        fileName: fileName,
-        format: 'json',
-        size: JSON.stringify(generatedCodes).length
-      };
-    }
-    
-    res.json(responseData);
-    
-  } catch (error) {
-    console.error('批量生成邀请码错误:', error);
-    res.status(500).json({
-      success: false,
-      error: '服务器内部错误'
-    });
-  }
 });
 
-// 5. 验证邀请码有效性（公共接口）
-app.post('/api/validate-code', async (req, res) => {
-  try {
-    const { code } = req.body;
-    
-    if (!code) {
-      return res.status(400).json({
-        success: false,
-        error: '请提供邀请码'
-      });
+// 4. 检查申请状态（公共接口）
+app.get('/api/invitation/check/:applicationId', async (req, res) => {
+    try {
+        const { applicationId } = req.params;
+        
+        const result = await pool.query(
+            `SELECT application_id, username, email, purpose, notes, 
+                    status, review_notes, generated_code, reviewed_by, 
+                    reviewed_at, created_at, updated_at
+             FROM invitation_applications 
+             WHERE application_id = $1`,
+            [applicationId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: '申请不存在'
+            });
+        }
+        
+        const application = result.rows[0];
+        
+        res.json({
+            success: true,
+            application: {
+                id: application.application_id,
+                username: application.username,
+                email: application.email,
+                purpose: application.purpose,
+                status: application.status,
+                review_notes: application.review_notes,
+                generated_code: application.generated_code,
+                created_at: application.created_at,
+                reviewed_at: application.reviewed_at
+            }
+        });
+        
+    } catch (error) {
+        console.error('获取申请状态错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '服务器内部错误'
+        });
     }
-    
-    // 查询邀请码
-    const result = await pool.query(
-      `SELECT code, created_by, is_active, expires_at, used_count, max_uses
-       FROM invitation_codes WHERE code = $1`,
-      [code]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.json({
-        success: false,
-        valid: false,
-        error: '邀请码不存在'
-      });
-    }
-    
-    const invitation = result.rows[0];
-    
-    // 检查是否有效
-    if (!invitation.is_active) {
-      return res.json({
-        success: false,
-        valid: false,
-        error: '邀请码已失效'
-      });
-    }
-    
-    if (invitation.expires_at && new Date() > invitation.expires_at) {
-      return res.json({
-        success: false,
-        valid: false,
-        error: '邀请码已过期'
-      });
-    }
-    
-    if (invitation.used_count >= invitation.max_uses) {
-      return res.json({
-        success: false,
-        valid: false,
-        error: '邀请码使用次数已达上限'
-      });
-    }
-    
-    res.json({
-      success: true,
-      valid: true,
-      data: {
-        code: invitation.code,
-        created_by: invitation.created_by,
-        is_active: invitation.is_active,
-        expires_at: invitation.expires_at,
-        used_count: invitation.used_count,
-        max_uses: invitation.max_uses
-      }
-    });
-    
-  } catch (error) {
-    console.error('验证邀请码错误:', error);
-    res.status(500).json({
-      success: false,
-      error: '服务器内部错误'
-    });
-  }
 });
 
-// 6. 获取邀请码统计（需要管理员权限）
-app.get('/api/invitation-stats', authenticateAdmin, async (req, res) => {
-  try {
-    // 获取总数
-    const totalCodes = await pool.query(
-      'SELECT COUNT(*) as total FROM invitation_codes'
-    );
-    
-    // 获取可用数量
-    const availableCodes = await pool.query(`
-      SELECT COUNT(*) as available 
-      FROM invitation_codes 
-      WHERE is_active = true 
-      AND (expires_at IS NULL OR expires_at > NOW())
-      AND used_count < max_uses
-    `);
-    
-    // 获取已使用数量
-    const usedCodes = await pool.query(
-      'SELECT COUNT(*) as used FROM invitation_codes WHERE used_count >= max_uses'
-    );
-    
-    // 获取过期数量
-    const expiredCodes = await pool.query(
-      'SELECT COUNT(*) as expired FROM invitation_codes WHERE expires_at < NOW()'
-    );
-    
-    // 获取最近生成的数量
-    const recentCodes = await pool.query(`
-      SELECT COUNT(*) as recent 
-      FROM invitation_codes 
-      WHERE created_at > NOW() - INTERVAL '7 days'
-    `);
-    
-    // 获取申请统计
-    const appStats = await pool.query(`
-      SELECT 
-        status,
-        COUNT(*) as count
-      FROM invitation_applications 
-      GROUP BY status
-    `);
-    
-    res.json({
-      success: true,
-      stats: {
-        total: parseInt(totalCodes.rows[0].total),
-        available: parseInt(availableCodes.rows[0].available),
-        used: parseInt(usedCodes.rows[0].used),
-        expired: parseInt(expiredCodes.rows[0].expired),
-        recent: parseInt(recentCodes.rows[0].recent),
-        applications: appStats.rows.reduce((acc, row) => {
-          acc[row.status] = parseInt(row.count);
-          return acc;
-        }, {})
-      },
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('获取统计错误:', error);
-    res.status(500).json({
-      success: false,
-      error: '服务器内部错误'
-    });
-  }
-});
+
 // 3. 用户登录
 app.post('/api/login', async (req, res) => {
   try {
@@ -1852,6 +1516,287 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
       error: '服务器内部错误' 
     });
   }
+});
+// ============ 管理员邀请码管理API ============ //
+
+// 15. 获取待审核申请列表（管理员接口）
+app.get('/api/admin/applications/pending', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT application_id, username, email, purpose, notes, created_at
+             FROM invitation_applications 
+             WHERE status = 'pending'
+             ORDER BY created_at DESC`
+        );
+        
+        res.json({
+            success: true,
+            applications: result.rows,
+            count: result.rows.length
+        });
+        
+    } catch (error) {
+        console.error('获取待审核申请错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '服务器内部错误'
+        });
+    }
+});
+
+// 16. 审核申请（管理员接口）
+app.post('/api/admin/applications/:applicationId/review', authenticateAdmin, async (req, res) => {
+    try {
+        const { applicationId } = req.params;
+        const { action, reviewNotes } = req.body; // action: 'approve' 或 'reject'
+        const adminId = req.userId;
+        
+        if (!['approve', 'reject'].includes(action)) {
+            return res.status(400).json({
+                success: false,
+                error: 'action必须是approve或reject'
+            });
+        }
+        
+        // 获取申请信息
+        const appResult = await pool.query(
+            `SELECT * FROM invitation_applications WHERE application_id = $1`,
+            [applicationId]
+        );
+        
+        if (appResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: '申请不存在'
+            });
+        }
+        
+        const application = appResult.rows[0];
+        
+        if (application.status !== 'pending') {
+            return res.status(400).json({
+                success: false,
+                error: '该申请已被处理'
+            });
+        }
+        
+        const newStatus = action === 'approve' ? 'completed' : 'rejected';
+        let generatedCode = null;
+        
+        // 开始事务
+        await pool.query('BEGIN');
+        
+        try {
+            // 如果是批准，生成邀请码
+            if (action === 'approve') {
+                // 生成唯一邀请码
+                generatedCode = generateInvitationCode();
+                
+                // 检查邀请码是否唯一
+                const codeCheck = await pool.query(
+                    'SELECT id FROM invitation_codes WHERE code = $1',
+                    [generatedCode]
+                );
+                
+                if (codeCheck.rows.length > 0) {
+                    throw new Error('邀请码重复，请重试');
+                }
+                
+                // 创建邀请码
+                await pool.query(
+                    `INSERT INTO invitation_codes 
+                     (code, created_by, created_for, is_active, expires_at, notes) 
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [
+                        generatedCode,
+                        `admin_${adminId}`,
+                        application.username,
+                        true,
+                        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30天有效期
+                        `为申请 ${applicationId} 生成`
+                    ]
+                );
+            }
+            
+            // 更新申请状态
+            await pool.query(
+                `UPDATE invitation_applications 
+                 SET status = $1, 
+                     review_notes = $2, 
+                     reviewed_by = $3, 
+                     reviewed_at = $4,
+                     generated_code = $5,
+                     updated_at = $4
+                 WHERE application_id = $6`,
+                [
+                    newStatus,
+                    reviewNotes || '',
+                    adminId,
+                    new Date().toISOString(),
+                    generatedCode,
+                    applicationId
+                ]
+            );
+            
+            await pool.query('COMMIT');
+            
+            console.log(`✅ 申请 ${applicationId} 已${action === 'approve' ? '批准' : '拒绝'}`);
+            
+            res.json({
+                success: true,
+                message: `申请已${action === 'approve' ? '批准并生成邀请码' : '拒绝'}`,
+                application: {
+                    id: applicationId,
+                    username: application.username,
+                    status: newStatus,
+                    generated_code: generatedCode,
+                    review_notes: reviewNotes || '',
+                    reviewed_at: new Date().toISOString()
+                }
+            });
+            
+        } catch (transactionError) {
+            await pool.query('ROLLBACK');
+            throw transactionError;
+        }
+        
+    } catch (error) {
+        console.error('审核申请错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '服务器内部错误',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// 17. 批量操作申请（管理员接口）
+app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, res) => {
+    try {
+        const { applicationIds, action, reviewNotes } = req.body;
+        
+        if (!Array.isArray(applicationIds) || applicationIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: '请提供申请ID列表'
+            });
+        }
+        
+        const results = {
+            approved: [],
+            rejected: [],
+            errors: []
+        };
+        
+        for (const applicationId of applicationIds) {
+            try {
+                const response = await pool.query(
+                    `UPDATE invitation_applications 
+                     SET status = $1, 
+                         review_notes = $2, 
+                         reviewed_by = $3, 
+                         reviewed_at = $4,
+                         updated_at = $4
+                     WHERE application_id = $5 AND status = 'pending'
+                     RETURNING application_id, username`,
+                    [
+                        action === 'approve' ? 'completed' : 'rejected',
+                        reviewNotes || '',
+                        req.userId,
+                        new Date().toISOString(),
+                        applicationId
+                    ]
+                );
+                
+                if (response.rows.length > 0 && action === 'approve') {
+                    // 为批准的申请生成邀请码
+                    const generatedCode = generateInvitationCode();
+                    
+                    await pool.query(
+                        `INSERT INTO invitation_codes 
+                         (code, created_by, created_for, is_active, expires_at, notes) 
+                         VALUES ($1, $2, $3, $4, $5, $6)`,
+                        [
+                            generatedCode,
+                            `admin_${req.userId}`,
+                            response.rows[0].username,
+                            true,
+                            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                            `批量批准 - 申请 ${applicationId}`
+                        ]
+                    );
+                    
+                    results.approved.push({
+                        applicationId,
+                        username: response.rows[0].username,
+                        code: generatedCode
+                    });
+                } else if (response.rows.length > 0) {
+                    results.rejected.push(response.rows[0]);
+                }
+            } catch (error) {
+                results.errors.push({ applicationId, error: error.message });
+            }
+        }
+        
+        res.json({
+            success: true,
+            results,
+            message: `批量处理完成: ${results.approved.length} 个批准, ${results.rejected.length} 个拒绝, ${results.errors.length} 个错误`
+        });
+        
+    } catch (error) {
+        console.error('批量操作错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '服务器内部错误'
+        });
+    }
+});
+
+// 18. 获取申请统计（管理员接口）
+app.get('/api/admin/applications/stats', authenticateAdmin, async (req, res) => {
+    try {
+        const statsResult = await pool.query(`
+            SELECT 
+                status,
+                COUNT(*) as count
+            FROM invitation_applications 
+            GROUP BY status
+        `);
+        
+        const dailyResult = await pool.query(`
+            SELECT 
+                DATE(created_at) as date,
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+            FROM invitation_applications 
+            WHERE created_at > NOW() - INTERVAL '30 days'
+            GROUP BY DATE(created_at)
+            ORDER BY date DESC
+        `);
+        
+        res.json({
+            success: true,
+            stats: {
+                by_status: statsResult.rows.reduce((acc, row) => {
+                    acc[row.status] = parseInt(row.count);
+                    return acc;
+                }, {}),
+                daily: dailyResult.rows,
+                total: statsResult.rows.reduce((sum, row) => sum + parseInt(row.count), 0)
+            }
+        });
+        
+    } catch (error) {
+        console.error('获取统计错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '服务器内部错误'
+        });
+    }
 });
 
 // ============ 错误处理 ============
