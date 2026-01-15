@@ -276,50 +276,60 @@ app.use((req, res, next) => {
   next();
 });
 
-// ============ 认证中间件 ============
+// ============ 认证中间件 ============ 
 const authenticateToken = async (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ success: false, error: '未提供认证令牌' });
+    try {
+        console.log('[认证] 开始认证检查...');
+        console.log('[认证] 请求头:', req.headers);
+        
+        const authHeader = req.headers['authorization'];
+        console.log('[认证] Authorization头:', authHeader);
+        
+        const token = authHeader && authHeader.split(' ')[1];
+        console.log('[认证] 提取的令牌:', token ? `存在 (${token.substring(0, 20)}...)` : '不存在');
+        
+        if (!token) {
+            console.log('[认证] 错误: 未提供令牌');
+            return res.status(401).json({ 
+                success: false, 
+                error: '需要认证令牌',
+                code: 'MISSING_TOKEN'
+            });
+        }
+        
+        console.log('[认证] 验证JWT令牌...');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || '0UdwoIzW/8IzdWSZLa+VP+nLKV1OQKNAOi2PbXMF+pA=');
+        console.log('[认证] 解码成功, 用户ID:', decoded.userId);
+        
+        req.userId = decoded.userId;
+        next();
+    } catch (error) {
+        console.error('[认证] 错误:', error.message);
+        console.error('[认证] 错误类型:', error.name);
+        
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ 
+                success: false, 
+                error: '令牌已过期',
+                code: 'TOKEN_EXPIRED'
+            });
+        }
+        
+        if (error.name === 'JsonWebTokenError') {
+            console.log('[认证] JWT错误详情:', error.message);
+            return res.status(403).json({ 
+                success: false, 
+                error: '无效的认证令牌',
+                code: 'INVALID_TOKEN'
+            });
+        }
+        
+        return res.status(403).json({ 
+            success: false, 
+            error: '认证失败',
+            code: 'AUTH_FAILED'
+        });
     }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
-    req.userId = decoded.userId;
-    next();
-  } catch (error) {
-    return res.status(403).json({ success: false, error: '无效的认证令牌' });
-  }
-};
-
-const authenticateAdmin = async (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ success: false, error: '未提供认证令牌' });
-    }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key');
-    req.userId = decoded.userId;
-    
-    // 检查是否为管理员
-    const userResult = await pool.query(
-      'SELECT user_type FROM users WHERE id = $1',
-      [req.userId]
-    );
-    
-    if (userResult.rows.length === 0 || userResult.rows[0].user_type !== 'admin') {
-      return res.status(403).json({ success: false, error: '需要管理员权限' });
-    }
-    
-    next();
-  } catch (error) {
-    return res.status(403).json({ success: false, error: '无效的认证令牌' });
-  }
 };
 
 // ============ 工具函数 ============
@@ -656,45 +666,120 @@ app.get('/api/auth/status', (req, res) => {
 });
 // 6. 获取用户历史记录
 app.get('/api/history', authenticateToken, async (req, res) => {
-  try {
-    const { userId } = req;
-    
-    const result = await pool.query(
-      `SELECT r.*, u.username 
-       FROM records r 
-       LEFT JOIN users u ON r.user_id = u.id 
-       WHERE r.user_id = $1 
-       ORDER BY r.created_at DESC`,
-      [userId]
-    );
-    
-    res.json({
-      success: true,
-      records: result.rows.map(record => ({
-        id: record.id,
-        match_name: record.match_name,
-        handicap_type: record.handicap_type,
-        initial_handicap: parseFloat(record.initial_handicap),
-        current_handicap: parseFloat(record.current_handicap),
-        initial_water: parseFloat(record.initial_water),
-        current_water: parseFloat(record.current_water),
-        handicap_change: parseFloat(record.handicap_change),
-        water_change: parseFloat(record.water_change),
-        historical_record: record.historical_record,
-        recommendation: record.recommendation,
-        actual_result: record.actual_result,
-        created_at: record.created_at,
-        username: record.username
-      }))
-    });
-    
-  } catch (error) {
-    console.error('获取历史记录错误:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '服务器内部错误' 
-    });
-  }
+    try {
+        console.log('[历史记录API] 开始处理请求');
+        console.log('[历史记录API] 用户ID:', req.userId);
+        
+        // 验证用户ID是否存在
+        if (!req.userId) {
+            console.log('[历史记录API] 错误: 用户ID为空');
+            return res.status(400).json({
+                success: false,
+                error: '用户ID无效'
+            });
+        }
+        
+        const userId = req.userId;
+        
+        console.log(`[历史记录API] 查询用户 ${userId} 的记录...`);
+        
+        // 先检查数据库连接
+        try {
+            const dbTest = await pool.query('SELECT NOW() as time');
+            console.log('[历史记录API] 数据库连接正常:', dbTest.rows[0].time);
+        } catch (dbError) {
+            console.error('[历史记录API] 数据库连接错误:', dbError);
+            return res.status(500).json({
+                success: false,
+                error: '数据库连接失败'
+            });
+        }
+        
+        // 检查用户是否存在
+        const userCheck = await pool.query(
+            'SELECT id, username FROM users WHERE id = $1',
+            [userId]
+        );
+        
+        if (userCheck.rows.length === 0) {
+            console.log(`[历史记录API] 用户ID ${userId} 不存在`);
+            return res.status(404).json({ 
+                success: false, 
+                error: '用户不存在' 
+            });
+        }
+        
+        console.log(`[历史记录API] 用户 ${userCheck.rows[0].username} (ID: ${userId}) 存在`);
+        
+        // 查询记录
+        const result = await pool.query(
+            `SELECT 
+                id,
+                match_name,
+                handicap_type,
+                initial_handicap,
+                current_handicap,
+                initial_water,
+                current_water,
+                handicap_change,
+                water_change,
+                historical_record,
+                recommendation,
+                actual_result,
+                created_at
+             FROM records 
+             WHERE user_id = $1 
+             ORDER BY created_at DESC
+             LIMIT 100`,
+            [userId]
+        );
+        
+        console.log(`[历史记录API] 查询到 ${result.rows.length} 条记录`);
+        
+        if (result.rows.length > 0) {
+            console.log('[历史记录API] 第一条记录:', {
+                id: result.rows[0].id,
+                match_name: result.rows[0].match_name,
+                created_at: result.rows[0].created_at
+            });
+        }
+        
+        // 格式化响应数据
+        const formattedRecords = result.rows.map(record => ({
+            id: record.id,
+            match_name: record.match_name || '未命名赛事',
+            handicap_type: record.handicap_type,
+            initial_handicap: parseFloat(record.initial_handicap) || 0,
+            current_handicap: parseFloat(record.current_handicap) || 0,
+            initial_water: parseFloat(record.initial_water) || 0,
+            current_water: parseFloat(record.current_water) || 0,
+            handicap_change: parseFloat(record.handicap_change) || 0,
+            water_change: parseFloat(record.water_change) || 0,
+            historical_record: record.historical_record || 'loss',
+            recommendation: record.recommendation || '无推荐',
+            actual_result: record.actual_result || '',
+            created_at: record.created_at
+        }));
+        
+        console.log('[历史记录API] 返回数据成功');
+        
+        res.json({
+            success: true,
+            records: formattedRecords,
+            count: formattedRecords.length,
+            userId: userId,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('[历史记录API] 错误:', error);
+        console.error('[历史记录API] 错误堆栈:', error.stack);
+        res.status(500).json({ 
+            success: false, 
+            error: '服务器内部错误',
+            details: error.message
+        });
+    }
 });
 
 // 7. 保存记录
