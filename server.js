@@ -312,35 +312,35 @@ const initDatabase = async () => {
     }
     
     // 创建一些测试邀请码
-    const testCodes = ['TEST123', 'TEST456', 'INVITE789'];
-    let createdTestCodes = 0;
+  //  const testCodes = ['TEST123', 'TEST456', 'INVITE789'];
+   // let createdTestCodes = 0;
     
-    for (const code of testCodes) {
-      const codeCheck = await pool.query(
-        'SELECT id FROM invitation_codes WHERE code = $1',
-        [code]
-      );
+  //  for (const code of testCodes) {
+   ////   const codeCheck = await pool.query(
+      //  'SELECT id FROM invitation_codes WHERE code = $1',
+    //    [code]
+   //   );
       
-      if (codeCheck.rows.length === 0) {
-        await pool.query(
-          `INSERT INTO invitation_codes (code, created_by, purpose, is_active, expires_at, notes) 
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            code, 
-            'system',
-            '测试邀请码',
-            true, 
-            new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-            '系统生成的测试邀请码'
-          ]
-        );
-        createdTestCodes++;
-      }
-    }
+    //  if (codeCheck.rows.length === 0) {
+     //   await pool.query(
+     //     `INSERT INTO invitation_codes (code, created_by, purpose, is_active, expires_at, notes) 
+     //      VALUES ($1, $2, $3, $4, $5, $6)`,
+     //     [
+      //      code, 
+            //'system',
+      //      '测试邀请码',
+       //     true, 
+       //     new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        //    '系统生成的测试邀请码'
+        //  ]
+    //    );
+//        createdTestCodes++;
+//      }
+//    }
     
-    if (createdTestCodes > 0) {
-      console.log(`✅ 创建了 ${createdTestCodes} 个测试邀请码`);
-    }
+//    if (createdTestCodes > 0) {
+   //   console.log(`✅ 创建了 ${createdTestCodes} 个测试邀请码`);
+ //   }
     
     console.log('🎉 数据库初始化完成');
     
