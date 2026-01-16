@@ -10,7 +10,76 @@ const helmet = require('helmet');
 // ============ 初始化应用 ============
 const app = express();
 const port = process.env.PORT || 3000;
-
+// ============ 表修复函数 ============ //
+async function repairTableColumns() {
+  console.log('🔧 开始检查并修复表结构...');
+  
+  const repairs = [
+    {
+      table: 'invitation_codes',
+      column: 'notes',
+      type: 'TEXT',
+      description: '邀请码备注'
+    },
+    {
+      table: 'invitation_applications', 
+      column: 'generated_code',
+      type: 'VARCHAR(50)',
+      description: '生成的邀请码'
+    },
+    {
+      table: 'invitation_applications',
+      column: 'reviewed_by',
+      type: 'INTEGER',
+      description: '审核人ID'
+    },
+    {
+      table: 'invitation_applications',
+      column: 'reviewed_at',
+      type: 'TIMESTAMP',
+      description: '审核时间'
+    },
+    {
+      table: 'invitation_applications',
+      column: 'review_notes',
+      type: 'TEXT',
+      description: '审核备注'
+    }
+  ];
+  
+  let repairedCount = 0;
+  
+  for (const repair of repairs) {
+    try {
+      // 检查列是否存在
+      const checkResult = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = $1 AND column_name = $2
+      `, [repair.table, repair.column]);
+      
+      if (checkResult.rows.length === 0) {
+        // 列不存在，添加它
+        await pool.query(`
+          ALTER TABLE ${repair.table} 
+          ADD COLUMN ${repair.column} ${repair.type}
+        `);
+        console.log(`✅ 已为 ${repair.table} 表添加 ${repair.column} 列 (${repair.description})`);
+        repairedCount++;
+      } else {
+        console.log(`✅ ${repair.table} 表的 ${repair.column} 列已存在`);
+      }
+    } catch (error) {
+      // 忽略"列已存在"的错误
+      if (!error.message.includes('already exists') && !error.message.includes('duplicate column')) {
+        console.error(`⚠️ 检查/修复 ${repair.table}.${repair.column} 时出错:`, error.message);
+      }
+    }
+  }
+  
+  console.log(`🔧 表结构修复完成，修复了 ${repairedCount} 个缺失列`);
+  return repairedCount;
+}
 // ============ 数据库连接 ============
 // 在 server.js 中优化连接池
 const pool = new Pool({
@@ -45,10 +114,10 @@ pool.connect()
     console.error('❌ 数据库连接失败:', err);
     console.log('当前连接字符串:', process.env.DATABASE_URL ? '已设置' : '未设置');
   });
-// ============ 初始化数据库表 ============
+// ============ 初始化数据库表 ============ //
 const initDatabase = async () => {
   try {
-    console.log('正在初始化数据库表...');
+    console.log('📊 正在初始化数据库表...');
     
     // 用户表
     await pool.query(`
@@ -78,12 +147,12 @@ const initDatabase = async () => {
       )
     `);
     
-    // 邀请码表
+    // 邀请码表 - 确保包含notes列
     await pool.query(`
       CREATE TABLE IF NOT EXISTS invitation_codes (
         id SERIAL PRIMARY KEY,
-       code VARCHAR(50) UNIQUE NOT NULL,
-      created_by VARCHAR(50) NOT NULL,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        created_by VARCHAR(50) NOT NULL,
         created_for VARCHAR(50),
         max_uses INTEGER DEFAULT 1,
         used_count INTEGER DEFAULT 0,
@@ -93,35 +162,9 @@ const initDatabase = async () => {
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-     )
+      )
     `);
-    // 邀请码申请表
-await pool.query(`
-    CREATE TABLE IF NOT EXISTS invitation_applications (
-        id SERIAL PRIMARY KEY,
-        application_id VARCHAR(50) UNIQUE NOT NULL,
-        username VARCHAR(100) NOT NULL,
-        email VARCHAR(200),
-        purpose VARCHAR(50) NOT NULL,
-        notes TEXT,
-        status VARCHAR(20) DEFAULT 'pending',
-        review_notes TEXT,
-        reviewed_by INTEGER REFERENCES users(id),
-        reviewed_at TIMESTAMP,
-        generated_code VARCHAR(50),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CHECK (status IN ('pending', 'completed', 'rejected'))
-    )
-`);
-
-// 为申请表创建索引
-await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_invitation_applications_status ON invitation_applications(status);
-    CREATE INDEX IF NOT EXISTS idx_invitation_applications_created_at ON invitation_applications(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_invitation_applications_username ON invitation_applications(username);
-    CREATE INDEX IF NOT EXISTS idx_invitation_applications_application_id ON invitation_applications(application_id);
-`);
+    
     // 记录表
     await pool.query(`
       CREATE TABLE IF NOT EXISTS records (
@@ -168,7 +211,57 @@ await pool.query(`
       )
     `);
     
+    // 邀请码申请表
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invitation_applications (
+        id SERIAL PRIMARY KEY,
+        application_id VARCHAR(50) UNIQUE NOT NULL,
+        username VARCHAR(100) NOT NULL,
+        email VARCHAR(200),
+        purpose VARCHAR(50) NOT NULL,
+        notes TEXT,
+        status VARCHAR(20) DEFAULT 'pending',
+        review_notes TEXT,
+        reviewed_by INTEGER REFERENCES users(id),
+        reviewed_at TIMESTAMP,
+        generated_code VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CHECK (status IN ('pending', 'completed', 'rejected'))
+      )
+    `);
+    
+    console.log('✅ 所有表创建完成');
+    
+    // 运行表修复
+    const repairedCount = await repairTableColumns();
+    
+    if (repairedCount > 0) {
+      console.log(`🔄 修复了 ${repairedCount} 个缺失的表列，正在重新检查表结构...`);
+      
+      // 再次检查关键列
+      const criticalColumns = [
+        { table: 'invitation_codes', column: 'notes' },
+        { table: 'invitation_applications', column: 'generated_code' }
+      ];
+      
+      for (const col of criticalColumns) {
+        const result = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = $1 AND column_name = $2
+        `, [col.table, col.column]);
+        
+        if (result.rows.length > 0) {
+          console.log(`✅ 确认 ${col.table}.${col.column} 列已存在`);
+        } else {
+          console.error(`❌ 严重错误: ${col.table}.${col.column} 列仍然缺失！`);
+        }
+      }
+    }
+    
     // 创建索引
+    console.log('正在创建索引...');
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
       CREATE INDEX IF NOT EXISTS idx_users_user_type ON users(user_type);
@@ -176,7 +269,13 @@ await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_records_created_at ON records(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_invitation_codes_code ON invitation_codes(code);
       CREATE INDEX IF NOT EXISTS idx_invitation_codes_is_active ON invitation_codes(is_active);
+      CREATE INDEX IF NOT EXISTS idx_invitation_applications_status ON invitation_applications(status);
+      CREATE INDEX IF NOT EXISTS idx_invitation_applications_created_at ON invitation_applications(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_invitation_applications_username ON invitation_applications(username);
+      CREATE INDEX IF NOT EXISTS idx_invitation_applications_application_id ON invitation_applications(application_id);
     `);
+    
+    console.log('✅ 索引创建完成');
     
     // 创建默认管理员账户
     const adminCheck = await pool.query(
@@ -198,10 +297,14 @@ await pool.query(`
         ]
       );
       console.log('✅ 默认管理员账户已创建');
+    } else {
+      console.log('✅ 管理员账户已存在');
     }
     
     // 创建一些测试邀请码
     const testCodes = ['TEST123', 'TEST456', 'INVITE789'];
+    let createdTestCodes = 0;
+    
     for (const code of testCodes) {
       const codeCheck = await pool.query(
         'SELECT id FROM invitation_codes WHERE code = $1',
@@ -210,16 +313,29 @@ await pool.query(`
       
       if (codeCheck.rows.length === 0) {
         await pool.query(
-          `INSERT INTO invitation_codes (code, created_by, is_active, expires_at) 
-           VALUES ($1, $2, $3, $4)`,
-          [code, 'system', true, new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)]
+          `INSERT INTO invitation_codes (code, created_by, is_active, expires_at, notes) 
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            code, 
+            'system', 
+            true, 
+            new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            '测试邀请码'
+          ]
         );
+        createdTestCodes++;
       }
     }
     
-    console.log('✅ 数据库初始化完成');
+    if (createdTestCodes > 0) {
+      console.log(`✅ 创建了 ${createdTestCodes} 个测试邀请码`);
+    }
+    
+    console.log('🎉 数据库初始化完成');
+    
   } catch (error) {
     console.error('❌ 数据库初始化失败:', error);
+    // 不抛出错误，让服务器继续运行
   }
 };
 // ============ CORS配置 ============
@@ -1519,7 +1635,29 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
   }
 });
 // ============ 管理员邀请码管理API ============ //
-
+// 修复表结构API（管理员用）
+app.post('/api/admin/repair-tables', authenticateAdmin, async (req, res) => {
+  try {
+    console.log('管理员请求修复表结构...');
+    
+    const repairedCount = await repairTableColumns();
+    
+    res.json({
+      success: true,
+      message: `表结构修复完成，修复了 ${repairedCount} 个缺失列`,
+      repairedCount: repairedCount,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('修复表结构失败:', error);
+    res.status(500).json({
+      success: false,
+      error: '修复表结构失败',
+      details: error.message
+    });
+  }
+});
 // 15. 获取待审核申请列表（管理员接口）
 app.get('/api/admin/applications/pending', authenticateAdmin, async (req, res) => {
     try {
@@ -1589,48 +1727,35 @@ app.post('/api/admin/applications/:applicationId/review', authenticateAdmin, asy
         
         try {
             // 如果是批准，生成邀请码
-            if (action === 'approve') {
-                // 生成唯一邀请码
-                generatedCode = generateInvitationCode();
-                
-                // 检查邀请码是否唯一
-                const codeCheck = await pool.query(
-                    'SELECT id FROM invitation_codes WHERE code = $1',
-                    [generatedCode]
-                );
-                
-                if (codeCheck.rows.length > 0) {
-                    throw new Error('邀请码重复，请重试');
-                }
-                
-                // 创建邀请码
-                await pool.query(
-                    `INSERT INTO invitation_codes 
-                     (code, created_by, created_for, is_active, expires_at, notes) 
-                     VALUES ($1, $2, $3, $4, $5, $6)`,
-                    [
-                        generatedCode,
-                        `admin_${adminId}`,
-                        application.username,
-                        true,
-                        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30天有效期
-                        `为申请 ${applicationId} 生成`
-                    ]
-                );
-            }
+        if (action === 'approve') {
+            const generatedCode = generateInvitationCode();
+            
+            // 创建邀请码（包含notes参数）
+            await pool.query(
+                `INSERT INTO invitation_codes 
+                 (code, created_by, created_for, is_active, expires_at, notes) 
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [
+                    generatedCode,
+                    `admin_${adminId}`,
+                    application.username,
+                    true,
+                    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30天有效期
+                    `为申请 ${applicationId} 生成 - ${reviewNotes || '无备注'}`
+                ]
+            );
             
             // 更新申请状态
             await pool.query(
                 `UPDATE invitation_applications 
-                 SET status = $1, 
-                     review_notes = $2, 
-                     reviewed_by = $3, 
-                     reviewed_at = $4,
-                     generated_code = $5,
-                     updated_at = $4
-                 WHERE application_id = $6`,
+                 SET status = 'completed', 
+                     review_notes = $1, 
+                     reviewed_by = $2, 
+                     reviewed_at = $3,
+                     generated_code = $4,
+                     updated_at = $3
+                 WHERE application_id = $5`,
                 [
-                    newStatus,
                     reviewNotes || '',
                     adminId,
                     new Date().toISOString(),
@@ -1638,6 +1763,25 @@ app.post('/api/admin/applications/:applicationId/review', authenticateAdmin, asy
                     applicationId
                 ]
             );
+            
+        } else {
+            // 拒绝申请
+            await pool.query(
+                `UPDATE invitation_applications 
+                 SET status = 'rejected', 
+                     review_notes = $1, 
+                     reviewed_by = $2, 
+                     reviewed_at = $3,
+                     updated_at = $3
+                 WHERE application_id = $4`,
+                [
+                    reviewNotes || '',
+                    adminId,
+                    new Date().toISOString(),
+                    applicationId
+                ]
+            );
+        }
             
             await pool.query('COMMIT');
             
