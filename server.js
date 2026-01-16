@@ -23,6 +23,12 @@ async function repairTableColumns() {
       description: '邀请码备注'
     },
     {
+      table: 'invitation_codes',
+      column: 'purpose',
+      type: 'VARCHAR(100)',
+      description: '邀请码用途'
+    },
+    {
       table: 'invitation_applications', 
       column: 'generated_code',
       type: 'VARCHAR(50)',
@@ -149,7 +155,7 @@ const initDatabase = async () => {
       )
     `);
     
-    // 邀请码表
+    // 邀请码表 - 确保包含所有列
     await pool.query(`
       CREATE TABLE IF NOT EXISTS invitation_codes (
         id SERIAL PRIMARY KEY,
@@ -242,8 +248,10 @@ const initDatabase = async () => {
     if (repairedCount > 0) {
       console.log(`🔄 修复了 ${repairedCount} 个缺失的表列，正在重新检查表结构...`);
       
+      // 检查关键列
       const criticalColumns = [
         { table: 'invitation_codes', column: 'notes' },
+        { table: 'invitation_codes', column: 'purpose' },
         { table: 'invitation_applications', column: 'generated_code' }
       ];
       
@@ -315,14 +323,15 @@ const initDatabase = async () => {
       
       if (codeCheck.rows.length === 0) {
         await pool.query(
-          `INSERT INTO invitation_codes (code, created_by, is_active, expires_at, notes) 
-           VALUES ($1, $2, $3, $4, $5)`,
+          `INSERT INTO invitation_codes (code, created_by, purpose, is_active, expires_at, notes) 
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             code, 
-            'system', 
+            'system',
+            '测试邀请码',
             true, 
             new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-            '测试邀请码'
+            '系统生成的测试邀请码'
           ]
         );
         createdTestCodes++;
@@ -337,29 +346,34 @@ const initDatabase = async () => {
     
   } catch (error) {
     console.error('❌ 数据库初始化失败:', error);
+    console.error('错误详情:', error.message);
   }
 };
 
 // ============ CORS配置 ============
 const corsOptions = {
   origin: function (origin, callback) {
+    // 允许所有来源（开发环境）
     if (process.env.NODE_ENV !== 'production') {
       callback(null, true);
       return;
     }
     
+    // 生产环境：只允许特定来源
     if (!origin) {
       callback(null, true);
     } else {
       const allowedOrigins = [
         'https://footballdream.vercel.app',
         'https://backenbsfootball.vercel.app',
-        'https://lwnn00.github.io/footballdream'
+        'https://lwnn00.github.io/footballdream',
+        'https://dream-lilac.vercel.app'
       ];
       
       if (allowedOrigins.includes(origin) || 
           origin.includes('vercel.app') ||
-          origin.includes('localhost')) {
+          origin.includes('localhost') ||
+          origin.includes('127.0.0.1')) {
         callback(null, true);
       } else {
         console.log(`CORS拒绝: ${origin}`);
@@ -413,12 +427,10 @@ app.use((req, res, next) => {
 // ============ 认证中间件 ============
 const authenticateToken = async (req, res, next) => {
     try {
-        console.log('[认证] 开始认证检查...');
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
         
         if (!token) {
-            console.log('[认证] 错误: 未提供令牌');
             return res.status(401).json({ 
                 success: false, 
                 error: '需要认证令牌',
@@ -426,10 +438,7 @@ const authenticateToken = async (req, res, next) => {
             });
         }
         
-        console.log('[认证] 验证JWT令牌...');
         const decoded = jwt.verify(token, process.env.JWT_SECRET || '0UdwoIzW/8IzdWSZLa+VP+nLKV1OQKNAOi2PbXMF+pA=');
-        console.log('[认证] 解码成功, 用户ID:', decoded.userId);
-        
         req.userId = decoded.userId;
         next();
     } catch (error) {
@@ -930,17 +939,46 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 6. 获取邀请码列表
+// 6. 获取邀请码列表（修复版 - 处理缺失的purpose列）
 app.get('/api/invitation-codes', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT code, created_by, created_at, 
-              is_active, used_count, max_uses, 
-              expires_at, used_by, notes, purpose
-       FROM invitation_codes 
-       WHERE is_active = true 
-       ORDER BY created_at DESC`
-    );
+    console.log('🔍 获取邀请码列表...');
+    
+    // 首先检查表结构
+    const tableCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'invitation_codes' AND column_name = 'purpose'
+    `);
+    
+    let query;
+    if (tableCheck.rows.length > 0) {
+      // 表中有purpose列
+      query = `
+        SELECT code, created_by, created_at, 
+               is_active, used_count, max_uses, 
+               expires_at, used_by, notes, purpose
+        FROM invitation_codes 
+        WHERE is_active = true 
+        ORDER BY created_at DESC
+      `;
+    } else {
+      // 表中没有purpose列，使用默认值
+      console.log('⚠️ invitation_codes表缺少purpose列，使用默认查询');
+      query = `
+        SELECT code, created_by, created_at, 
+               is_active, used_count, max_uses, 
+               expires_at, used_by, notes, 
+               '系统生成' as purpose
+        FROM invitation_codes 
+        WHERE is_active = true 
+        ORDER BY created_at DESC
+      `;
+    }
+    
+    const result = await pool.query(query);
+    
+    console.log(`✅ 获取到 ${result.rows.length} 个邀请码`);
     
     res.json({
       success: true,
@@ -954,23 +992,65 @@ app.get('/api/invitation-codes', async (req, res) => {
         expires_at: row.expires_at,
         used_by: row.used_by || [],
         notes: row.notes,
-        purpose: row.purpose
+        purpose: row.purpose || '系统生成'
       }))
     });
     
   } catch (error) {
     console.error('获取邀请码错误:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '服务器内部错误' 
-    });
+    
+    // 如果是列不存在的错误，尝试修复表结构
+    if (error.message.includes('column "purpose" does not exist')) {
+      console.log('尝试修复表结构...');
+      try {
+        await repairTableColumns();
+        
+        // 重新尝试查询
+        const result = await pool.query(`
+          SELECT code, created_by, created_at, 
+                 is_active, used_count, max_uses, 
+                 expires_at, used_by, notes, purpose
+          FROM invitation_codes 
+          WHERE is_active = true 
+          ORDER BY created_at DESC
+        `);
+        
+        res.json({
+          success: true,
+          codes: result.rows.map(row => ({
+            code: row.code,
+            created_by: row.created_by,
+            created_at: row.created_at,
+            is_active: row.is_active,
+            used_count: row.used_count,
+            max_uses: row.max_uses,
+            expires_at: row.expires_at,
+            used_by: row.used_by || [],
+            notes: row.notes,
+            purpose: row.purpose || '系统生成'
+          }))
+        });
+        
+      } catch (repairError) {
+        console.error('修复表结构失败:', repairError);
+        res.status(500).json({ 
+          success: false, 
+          error: '服务器内部错误，无法修复表结构' 
+        });
+      }
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: '服务器内部错误' 
+      });
+    }
   }
 });
 
 // 7. 导入邀请码
 app.post('/api/invitation-codes', authenticateAdmin, async (req, res) => {
   try {
-    const { codes, createdBy = 'admin' } = req.body;
+    const { codes, createdBy = 'admin', purpose = '批量导入' } = req.body;
     
     if (!Array.isArray(codes) || codes.length === 0) {
       return res.status(400).json({ 
@@ -991,9 +1071,9 @@ app.post('/api/invitation-codes', authenticateAdmin, async (req, res) => {
         
         if (existing.rows.length === 0) {
           await pool.query(
-            `INSERT INTO invitation_codes (code, created_by, is_active, notes) 
-             VALUES ($1, $2, $3, $4)`,
-            [code, createdBy, true, '批量导入']
+            `INSERT INTO invitation_codes (code, created_by, purpose, is_active, notes) 
+             VALUES ($1, $2, $3, $4, $5)`,
+            [code, createdBy, purpose, true, '批量导入']
           );
           inserted.push(code);
         } else {
@@ -1032,13 +1112,32 @@ app.post('/api/validate-code', async (req, res) => {
             });
         }
         
-        const result = await pool.query(
-            `SELECT code, created_by, created_for, max_uses, used_count, 
-                    is_active, expires_at, notes, purpose, created_at
-             FROM invitation_codes 
-             WHERE code = $1`,
-            [code.toUpperCase()]
-        );
+        // 检查表是否有purpose列
+        const tableCheck = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'invitation_codes' AND column_name = 'purpose'
+        `);
+        
+        let query;
+        if (tableCheck.rows.length > 0) {
+          query = `
+            SELECT code, created_by, created_for, max_uses, used_count, 
+                   is_active, expires_at, notes, purpose, created_at
+            FROM invitation_codes 
+            WHERE code = $1
+          `;
+        } else {
+          query = `
+            SELECT code, created_by, created_for, max_uses, used_count, 
+                   is_active, expires_at, notes, 
+                   '系统生成' as purpose, created_at
+            FROM invitation_codes 
+            WHERE code = $1
+          `;
+        }
+        
+        const result = await pool.query(query, [code.toUpperCase()]);
         
         if (result.rows.length === 0) {
             return res.json({
@@ -2009,12 +2108,13 @@ app.post('/api/admin/applications/:applicationId/review', authenticateAdmin, asy
                 
                 await pool.query(
                     `INSERT INTO invitation_codes 
-                     (code, created_by, created_for, is_active, expires_at, notes) 
-                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                     (code, created_by, created_for, purpose, is_active, expires_at, notes) 
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                     [
                         generatedCode,
                         `admin_${adminId}`,
                         application.username,
+                        `申请审核通过 - ${application.purpose}`,
                         true,
                         new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                         `为申请 ${applicationId} 生成 - ${reviewNotes || '无备注'}`
@@ -2117,7 +2217,7 @@ app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, 
                          reviewed_at = $4,
                          updated_at = $4
                      WHERE application_id = $5 AND status = 'pending'
-                     RETURNING application_id, username`,
+                     RETURNING application_id, username, purpose`,
                     [
                         action === 'approve' ? 'completed' : 'rejected',
                         reviewNotes || '',
@@ -2132,12 +2232,13 @@ app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, 
                     
                     await pool.query(
                         `INSERT INTO invitation_codes 
-                         (code, created_by, created_for, is_active, expires_at, notes) 
-                         VALUES ($1, $2, $3, $4, $5, $6)`,
+                         (code, created_by, created_for, purpose, is_active, expires_at, notes) 
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                         [
                             generatedCode,
                             `admin_${req.userId}`,
                             response.rows[0].username,
+                            `批量批准 - ${response.rows[0].purpose}`,
                             true,
                             new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                             `批量批准 - 申请 ${applicationId}`
@@ -2253,6 +2354,48 @@ app.get('/api/auth/status', (req, res) => {
   });
 });
 
+// ============ 表结构检查API ============
+app.get('/api/check-tables', async (req, res) => {
+  try {
+    const tables = ['users', 'invitation_codes', 'records', 'statistics', 'invitation_applications'];
+    const results = {};
+    
+    for (const table of tables) {
+      try {
+        const columns = await pool.query(`
+          SELECT column_name, data_type, is_nullable
+          FROM information_schema.columns
+          WHERE table_name = $1
+          ORDER BY ordinal_position
+        `, [table]);
+        
+        results[table] = {
+          exists: columns.rows.length > 0,
+          columns: columns.rows
+        };
+      } catch (error) {
+        results[table] = {
+          exists: false,
+          error: error.message
+        };
+      }
+    }
+    
+    res.json({
+      success: true,
+      tables: results,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('检查表结构错误:', error);
+    res.status(500).json({
+      success: false,
+      error: '检查表结构失败'
+    });
+  }
+});
+
 // ============ 错误处理 ============
 app.use((req, res) => {
   res.status(404).json({
@@ -2279,6 +2422,7 @@ const startServer = async () => {
       console.log(`🚀 服务器运行在 http://localhost:${port}`);
       console.log(`📊 健康检查: http://localhost:${port}/`);
       console.log(`🔧 测试端点: http://localhost:${port}/api/test`);
+      console.log(`🛠️ 表结构检查: http://localhost:${port}/api/check-tables`);
     });
   } catch (error) {
     console.error('❌ 服务器启动失败:', error);
