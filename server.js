@@ -90,6 +90,7 @@ const initDatabase = async () => {
         is_active BOOLEAN DEFAULT TRUE,
         expires_at TIMESTAMP,
         used_by JSONB,
+        notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
      )
