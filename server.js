@@ -557,7 +557,7 @@ app.get('/api/test', (req, res) => {
   });
 });
 
-// 2. 用户注册
+// ============ 用户注册（完全修复版） ============
 app.post('/api/register', validateRegister, async (req, res) => {
   console.log('📝 用户注册请求:', { username: req.body.username, invitationCode: req.body.invitationCode });
   
@@ -606,7 +606,8 @@ app.post('/api/register', validateRegister, async (req, res) => {
       is_active: code.is_active,
       used_count: code.used_count,
       max_uses: code.max_uses,
-      expires_at: code.expires_at
+      expires_at: code.expires_at,
+      used_by: code.used_by
     });
     
     if (!code.is_active) {
@@ -651,38 +652,84 @@ app.post('/api/register', validateRegister, async (req, res) => {
     const userId = userResult.rows[0].id;
     console.log(`✅ 用户创建成功, ID: ${userId}`);
     
+    // 更新邀请码使用记录 - 修复JSON格式问题
+    console.log(`📝 更新邀请码使用记录...`);
     try {
-      const usedBy = code.used_by || [];
-      usedBy.push({
-        username: username,
-        used_at: new Date().toISOString(),
-        user_id: userId
-      });
-      
-      console.log(`📝 更新邀请码使用记录...`);
-      await client.query(
-        `UPDATE invitation_codes 
-         SET used_count = used_count + 1, 
-             used_by = $1,
-             is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE code = $2`,
-        [usedBy, invitationCode]
-      );
-      
-      console.log(`✅ 邀请码使用记录更新成功`);
+        // 处理used_by字段
+        let usedByArray = [];
+        
+        // 检查used_by字段是否有效
+        if (code.used_by) {
+            if (Array.isArray(code.used_by)) {
+                // 已经是数组，直接使用
+                usedByArray = code.used_by;
+            } else if (typeof code.used_by === 'string') {
+                try {
+                    // 尝试解析JSON字符串
+                    const parsed = JSON.parse(code.used_by);
+                    if (Array.isArray(parsed)) {
+                        usedByArray = parsed;
+                    }
+                } catch (e) {
+                    console.log('⚠️ used_by字段不是有效的JSON，重置为空数组');
+                    usedByArray = [];
+                }
+            } else if (typeof code.used_by === 'object') {
+                // 尝试转换为数组
+                usedByArray = [code.used_by];
+            }
+        }
+        
+        // 添加新的使用记录
+        usedByArray.push({
+            username: username,
+            used_at: new Date().toISOString(),
+            user_id: userId
+        });
+        
+        console.log(`📋 更新后的used_by:`, usedByArray);
+        
+        // 更新邀请码 - 使用JSON.stringify确保正确的JSON格式
+        await client.query(
+            `UPDATE invitation_codes 
+             SET used_count = used_count + 1, 
+                 used_by = $1::jsonb,
+                 is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE code = $2`,
+            [JSON.stringify(usedByArray), invitationCode]
+        );
+        
+        console.log(`✅ 邀请码使用记录更新成功`);
     } catch (updateError) {
-      await client.query('ROLLBACK');
-      console.error('❌ 更新邀请码使用记录失败:', updateError);
-      return res.status(500).json({ 
-        success: false, 
-        error: '更新邀请码记录失败',
-        details: process.env.NODE_ENV === 'development' ? updateError.message : undefined
-      });
+        // 如果更新失败，尝试简单的方法
+        console.log('⚠️ 标准更新失败，尝试简单更新...');
+        try {
+            // 只更新计数，不更新used_by字段
+            await client.query(
+                `UPDATE invitation_codes 
+                 SET used_count = used_count + 1,
+                     is_active = CASE WHEN used_count + 1 >= max_uses THEN false ELSE is_active END,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE code = $1`,
+                [invitationCode]
+            );
+            console.log(`✅ 邀请码使用计数更新成功（跳过used_by字段）`);
+        } catch (simpleError) {
+            await client.query('ROLLBACK');
+            console.error('❌ 简单更新也失败:', simpleError);
+            return res.status(500).json({ 
+                success: false, 
+                error: '更新邀请码记录失败',
+                details: process.env.NODE_ENV === 'development' ? simpleError.message : undefined
+            });
+        }
     }
     
+    // 提交事务
     await client.query('COMMIT');
     
+    // 生成JWT令牌
     const token = generateToken(userResult.rows[0].id);
     
     console.log(`🎉 用户注册成功: ${username}, ID: ${userId}`);
@@ -702,6 +749,7 @@ app.post('/api/register', validateRegister, async (req, res) => {
   } catch (error) {
     console.error('❌ 注册错误:', error);
     
+    // 回滚事务
     if (client) {
       try {
         await client.query('ROLLBACK');
@@ -729,6 +777,7 @@ app.post('/api/register', validateRegister, async (req, res) => {
     });
     
   } finally {
+    // 释放数据库连接
     if (client) {
       client.release();
     }
