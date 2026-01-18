@@ -1,1 +1,1300 @@
-1
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>足球盘口管理系统 - 管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #1e3c72;
+            --secondary-color: #2a5298;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .admin-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .navbar-admin {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar {
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            min-height: calc(100vh - 56px);
+            position: sticky;
+            top: 56px;
+        }
+        
+        .sidebar .nav-link {
+            color: #495057;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 4px 8px;
+            transition: all 0.2s;
+        }
+        
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .sidebar .nav-link i {
+            width: 20px;
+            text-align: center;
+            margin-right: 10px;
+        }
+        
+        .main-content {
+            padding: 20px;
+            background-color: #f8f9fa;
+            min-height: calc(100vh - 56px);
+        }
+        
+        .card-admin {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            transition: transform 0.2s;
+        }
+        
+        .card-admin:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .table-admin {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .table-admin th {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+        }
+        
+        .table-admin td {
+            padding: 12px 16px;
+            vertical-align: middle;
+        }
+        
+        .badge-status {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .badge-pending {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .badge-approved {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-rejected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .modal-admin {
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            margin: 2px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .login-header h2 {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.25rem rgba(30, 60, 114, 0.25);
+        }
+        
+        .btn-admin-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            padding: 10px 20px;
+            font-weight: 500;
+        }
+        
+        .btn-admin-primary:hover {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+        
+        .alert-admin {
+            border-radius: 8px;
+            border: none;
+            padding: 12px 20px;
+        }
+        
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: static;
+                min-height: auto;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            
+            .main-content {
+                padding: 15px;
+            }
+            
+            .login-container {
+                margin: 50px 15px;
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 登录页面 -->
+    <div id="loginPage" style="display: none;">
+        <div class="login-container">
+            <div class="login-header">
+                <h2>足球盘口管理系统</h2>
+                <p class="text-muted">管理员登录</p>
+            </div>
+            
+            <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
+            
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label for="adminUsername" class="form-label">用户名</label>
+                    <input type="text" class="form-control" id="adminUsername" 
+                           placeholder="请输入管理员用户名" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="adminPassword" class="form-label">密码</label>
+                    <input type="password" class="form-control" id="adminPassword" 
+                           placeholder="请输入密码" required>
+                </div>
+                
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="rememberMe">
+                    <label class="form-check-label" for="rememberMe">记住我</label>
+                </div>
+                
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-admin-primary btn-lg">
+                        <span id="loginBtnText">登录</span>
+                        <span id="loginLoading" class="loader d-none"></span>
+                    </button>
+                </div>
+            </form>
+            
+            <div class="text-center mt-4">
+                <small class="text-muted">请使用管理员账户登录</small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 管理后台 -->
+    <div id="adminDashboard" style="display: none;">
+        <!-- 顶部导航栏 -->
+        <nav class="navbar navbar-admin navbar-expand-lg">
+            <div class="container-fluid">
+                <a class="navbar-brand text-white" href="#">
+                    <i class="bi bi-speedometer2"></i>
+                    <span class="ms-2">足球盘口管理后台</span>
+                </a>
+                
+                <div class="navbar-nav ms-auto">
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" 
+                           role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle"></i>
+                            <span id="currentAdminName" class="ms-1"></span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                            <li><a class="dropdown-item" href="#" id="profileBtn">
+                                <i class="bi bi-person me-2"></i>个人资料
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" id="settingsBtn">
+                                <i class="bi bi-gear me-2"></i>系统设置
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" id="logoutBtn">
+                                <i class="bi bi-box-arrow-right me-2"></i>退出登录
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="admin-container">
+            <div class="row">
+                <!-- 侧边栏 -->
+                <div class="col-lg-2 col-md-3">
+                    <div class="sidebar">
+                        <ul class="nav flex-column">
+                            <li class="nav-item">
+                                <a class="nav-link active" href="#" data-section="dashboard">
+                                    <i class="bi bi-speedometer2"></i>
+                                    控制面板
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#" data-section="users">
+                                    <i class="bi bi-people"></i>
+                                    用户管理
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#" data-section="invitations">
+                                    <i class="bi bi-ticket-perforated"></i>
+                                    邀请码管理
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#" data-section="applications">
+                                    <i class="bi bi-file-earmark-text"></i>
+                                    申请管理
+                                    <span id="pendingBadge" class="badge bg-danger float-end d-none">0</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#" data-section="records">
+                                    <i class="bi bi-clipboard-data"></i>
+                                    记录管理
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#" data-section="statistics">
+                                    <i class="bi bi-bar-chart"></i>
+                                    统计分析
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#" data-section="logs">
+                                    <i class="bi bi-journal-text"></i>
+                                    操作日志
+                                </a>
+                            </li>
+                            <li class="nav-item mt-4">
+                                <a class="nav-link" href="#" data-section="settings">
+                                    <i class="bi bi-shield-check"></i>
+                                    系统安全
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- 主内容区 -->
+                <div class="col-lg-10 col-md-9">
+                    <div class="main-content">
+                        <!-- 控制面板 -->
+                        <div id="dashboardSection" class="content-section">
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <h4><i class="bi bi-speedometer2 me-2"></i>系统概览</h4>
+                                <button class="btn btn-sm btn-outline-primary" id="refreshStats">
+                                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                                </button>
+                            </div>
+                            
+                            <!-- 统计卡片 -->
+                            <div class="row mb-4">
+                                <div class="col-md-3 col-sm-6 mb-3">
+                                    <div class="card card-admin stat-card">
+                                        <div class="stat-icon text-primary">
+                                            <i class="bi bi-people"></i>
+                                        </div>
+                                        <div class="stat-number" id="totalUsers">0</div>
+                                        <div class="stat-label">总用户数</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6 mb-3">
+                                    <div class="card card-admin stat-card">
+                                        <div class="stat-icon text-success">
+                                            <i class="bi bi-ticket-perforated"></i>
+                                        </div>
+                                        <div class="stat-number" id="activeInvites">0</div>
+                                        <div class="stat-label">可用邀请码</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6 mb-3">
+                                    <div class="card card-admin stat-card">
+                                        <div class="stat-icon text-warning">
+                                            <i class="bi bi-file-earmark-text"></i>
+                                        </div>
+                                        <div class="stat-number" id="pendingApps">0</div>
+                                        <div class="stat-label">待审申请</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6 mb-3">
+                                    <div class="card card-admin stat-card">
+                                        <div class="stat-icon text-info">
+                                            <i class="bi bi-clipboard-data"></i>
+                                        </div>
+                                        <div class="stat-number" id="totalRecords">0</div>
+                                        <div class="stat-label">总记录数</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 快速操作 -->
+                            <div class="card card-admin mb-4">
+                                <div class="card-header">
+                                    <h5 class="mb-0">快速操作</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-3 col-6 mb-3">
+                                            <button class="btn btn-outline-primary w-100" id="generateInvitesBtn">
+                                                <i class="bi bi-plus-circle me-2"></i>
+                                                生成邀请码
+                                            </button>
+                                        </div>
+                                        <div class="col-md-3 col-6 mb-3">
+                                            <button class="btn btn-outline-success w-100" id="viewAppsBtn">
+                                                <i class="bi bi-eye me-2"></i>
+                                                查看申请
+                                            </button>
+                                        </div>
+                                        <div class="col-md-3 col-6 mb-3">
+                                            <button class="btn btn-outline-info w-100" id="exportDataBtn">
+                                                <i class="bi bi-download me-2"></i>
+                                                导出数据
+                                            </button>
+                                        </div>
+                                        <div class="col-md-3 col-6 mb-3">
+                                            <button class="btn btn-outline-warning w-100" id="systemLogsBtn">
+                                                <i class="bi bi-list-check me-2"></i>
+                                                系统日志
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 最近活动 -->
+                            <div class="card card-admin">
+                                <div class="card-header">
+                                    <h5 class="mb-0">最近活动</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="recentActivity">
+                                        <div class="text-center py-4">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">加载中...</span>
+                                            </div>
+                                            <p class="mt-2 text-muted">正在加载活动记录...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 用户管理 -->
+                        <div id="usersSection" class="content-section" style="display: none;">
+                            <h4 class="mb-4"><i class="bi bi-people me-2"></i>用户管理</h4>
+                            <div id="usersContent">
+                                <!-- 用户管理内容将通过JavaScript动态加载 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 邀请码管理 -->
+                        <div id="invitationsSection" class="content-section" style="display: none;">
+                            <h4 class="mb-4"><i class="bi bi-ticket-perforated me-2"></i>邀请码管理</h4>
+                            <div id="invitationsContent">
+                                <!-- 邀请码管理内容将通过JavaScript动态加载 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 申请管理 -->
+                        <div id="applicationsSection" class="content-section" style="display: none;">
+                            <h4 class="mb-4"><i class="bi bi-file-earmark-text me-2"></i>申请管理</h4>
+                            <div id="applicationsContent">
+                                <!-- 申请管理内容将通过JavaScript动态加载 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 记录管理 -->
+                        <div id="recordsSection" class="content-section" style="display: none;">
+                            <h4 class="mb-4"><i class="bi bi-clipboard-data me-2"></i>记录管理</h4>
+                            <div id="recordsContent">
+                                <!-- 记录管理内容将通过JavaScript动态加载 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 统计分析 -->
+                        <div id="statisticsSection" class="content-section" style="display: none;">
+                            <h4 class="mb-4"><i class="bi bi-bar-chart me-2"></i>统计分析</h4>
+                            <div id="statisticsContent">
+                                <!-- 统计分析内容将通过JavaScript动态加载 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 操作日志 -->
+                        <div id="logsSection" class="content-section" style="display: none;">
+                            <h4 class="mb-4"><i class="bi bi-journal-text me-2"></i>操作日志</h4>
+                            <div id="logsContent">
+                                <!-- 日志内容将通过JavaScript动态加载 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 系统安全 -->
+                        <div id="settingsSection" class="content-section" style="display: none;">
+                            <h4 class="mb-4"><i class="bi bi-shield-check me-2"></i>系统安全设置</h4>
+                            <div id="settingsContent">
+                                <!-- 系统设置内容将通过JavaScript动态加载 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 生成邀请码模态框 -->
+    <div class="modal fade" id="generateInvitesModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">生成邀请码</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="generateInvitesForm">
+                        <div class="mb-3">
+                            <label for="inviteCount" class="form-label">生成数量</label>
+                            <input type="number" class="form-control" id="inviteCount" 
+                                   min="1" max="100" value="10" required>
+                            <div class="form-text">一次最多可生成100个邀请码</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="invitePurpose" class="form-label">用途说明</label>
+                            <input type="text" class="form-control" id="invitePurpose" 
+                                   placeholder="例如：VIP用户注册" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="expiryDays" class="form-label">有效期（天）</label>
+                            <input type="number" class="form-control" id="expiryDays" 
+                                   min="1" max="365" value="30" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="maxUses" class="form-label">最大使用次数</label>
+                            <input type="number" class="form-control" id="maxUses" 
+                                   min="1" value="1" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirmGenerateBtn">生成</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载遮罩 -->
+    <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-none" 
+         style="z-index: 9999;">
+        <div class="position-absolute top-50 start-50 translate-middle text-center">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+            <p class="mt-3">正在处理，请稍候...</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ==================== 全局配置 ====================
+        const CONFIG = {
+            API_BASE_URL: window.location.hostname === 'localhost' 
+                ? 'http://localhost:3000' 
+                : 'https://footballdream.vercel.app',
+            
+            ADMIN_ENDPOINTS: {
+                login: '/api/login',
+                users: '/api/admin/users',
+                stats: '/api/admin/stats',
+                generateCodes: '/api/admin/generate-codes',
+                applications: '/api/admin/applications',
+                invitations: '/api/admin/invitations',
+                records: '/api/admin/records',
+                logs: '/api/admin/logs',
+                settings: '/api/admin/settings'
+            }
+        };
+
+        // ==================== 状态管理 ====================
+        const AdminState = {
+            isAuthenticated: false,
+            adminInfo: null,
+            authToken: null,
+            
+            init() {
+                this.authToken = localStorage.getItem('adminToken');
+                const savedAdmin = localStorage.getItem('adminInfo');
+                
+                if (this.authToken && savedAdmin) {
+                    try {
+                        this.adminInfo = JSON.parse(savedAdmin);
+                        this.isAuthenticated = true;
+                    } catch (e) {
+                        this.clearAuth();
+                    }
+                }
+                
+                return this.isAuthenticated;
+            },
+            
+            saveAuth(token, adminInfo) {
+                this.authToken = token;
+                this.adminInfo = adminInfo;
+                this.isAuthenticated = true;
+                
+                localStorage.setItem('adminToken', token);
+                localStorage.setItem('adminInfo', JSON.stringify(adminInfo));
+            },
+            
+            clearAuth() {
+                this.isAuthenticated = false;
+                this.adminInfo = null;
+                this.authToken = null;
+                
+                localStorage.removeItem('adminToken');
+                localStorage.removeItem('adminInfo');
+            },
+            
+            getAuthHeader() {
+                return {
+                    'Authorization': `Bearer ${this.authToken}`,
+                    'Content-Type': 'application/json'
+                };
+            }
+        };
+
+        // ==================== API服务 ====================
+        const AdminAPI = {
+            async request(endpoint, method = 'GET', data = null) {
+                const url = `${CONFIG.API_BASE_URL}${endpoint}`;
+                const options = {
+                    method,
+                    headers: AdminState.getAuthHeader(),
+                    body: data ? JSON.stringify(data) : null
+                };
+                
+                try {
+                    console.log(`API请求: ${method} ${url}`, data);
+                    const response = await fetch(url, options);
+                    
+                    if (response.status === 401 || response.status === 403) {
+                        // 认证失败，清除状态
+                        AdminState.clearAuth();
+                        showLoginPage();
+                        throw new Error('认证失效，请重新登录');
+                    }
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    console.error('API请求失败:', error);
+                    throw error;
+                }
+            },
+            
+            async login(username, password) {
+                const response = await fetch(`${CONFIG.API_BASE_URL}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success && result.user.userType === 'admin') {
+                    AdminState.saveAuth(result.token, result.user);
+                    return { success: true, user: result.user };
+                } else if (result.success && result.user.userType !== 'admin') {
+                    return { success: false, error: '非管理员账户' };
+                } else {
+                    return { success: false, error: result.error || '登录失败' };
+                }
+            },
+            
+            async getStats() {
+                return this.request('/api/admin/stats');
+            },
+            
+            async getUsers(page = 1, limit = 20) {
+                return this.request(`/api/admin/users?page=${page}&limit=${limit}`);
+            },
+            
+            async getApplications(status = 'pending', page = 1, limit = 20) {
+                return this.request(`/api/admin/applications?status=${status}&page=${page}&limit=${limit}`);
+            },
+            
+            async generateInvitationCodes(data) {
+                return this.request('/api/admin/generate-codes', 'POST', data);
+            },
+            
+            async reviewApplication(applicationId, action, notes) {
+                return this.request(`/api/admin/applications/${applicationId}/review`, 'POST', {
+                    action,
+                    reviewNotes: notes
+                });
+            },
+            
+            async getLogs(page = 1, limit = 50) {
+                return this.request(`/api/admin/logs?page=${page}&limit=${limit}`);
+            }
+        };
+
+        // ==================== UI控制 ====================
+        const AdminUI = {
+            showLoading() {
+                document.getElementById('loadingOverlay').classList.remove('d-none');
+            },
+            
+            hideLoading() {
+                document.getElementById('loadingOverlay').classList.add('d-none');
+            },
+            
+            showLoginPage() {
+                document.getElementById('loginPage').style.display = 'block';
+                document.getElementById('adminDashboard').style.display = 'none';
+            },
+            
+            showAdminDashboard() {
+                document.getElementById('loginPage').style.display = 'none';
+                document.getElementById('adminDashboard').style.display = 'block';
+                
+                if (AdminState.adminInfo) {
+                    document.getElementById('currentAdminName').textContent = 
+                        AdminState.adminInfo.username;
+                }
+                
+                // 加载控制面板
+                this.loadDashboard();
+            },
+            
+            showAlert(message, type = 'danger') {
+                const alertDiv = document.getElementById('loginAlert');
+                alertDiv.textContent = message;
+                alertDiv.className = `alert alert-${type}`;
+                alertDiv.classList.remove('d-none');
+                
+                // 3秒后自动隐藏
+                setTimeout(() => {
+                    alertDiv.classList.add('d-none');
+                }, 3000);
+            },
+            
+            showSection(sectionId) {
+                // 隐藏所有内容区
+                document.querySelectorAll('.content-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+                
+                // 移除所有活动的侧边栏链接
+                document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+                    link.classList.remove('active');
+                });
+                
+                // 显示选中的内容区
+                const targetSection = document.getElementById(`${sectionId}Section`);
+                if (targetSection) {
+                    targetSection.style.display = 'block';
+                    
+                    // 激活对应的侧边栏链接
+                    const targetLink = document.querySelector(`[data-section="${sectionId}"]`);
+                    if (targetLink) {
+                        targetLink.classList.add('active');
+                    }
+                    
+                    // 加载对应内容
+                    this.loadSectionContent(sectionId);
+                }
+            },
+            
+            async loadDashboard() {
+                try {
+                    const stats = await AdminAPI.getStats();
+                    if (stats.success) {
+                        this.updateStats(stats.stats);
+                    }
+                } catch (error) {
+                    console.error('加载控制面板失败:', error);
+                }
+            },
+            
+            updateStats(stats) {
+                if (stats.total_users) {
+                    document.getElementById('totalUsers').textContent = stats.total_users;
+                }
+                if (stats.active_invites) {
+                    document.getElementById('activeInvites').textContent = stats.active_invites;
+                }
+                if (stats.pending_apps) {
+                    document.getElementById('pendingApps').textContent = stats.pending_apps;
+                    
+                    // 更新侧边栏徽章
+                    const badge = document.getElementById('pendingBadge');
+                    if (stats.pending_apps > 0) {
+                        badge.textContent = stats.pending_apps;
+                        badge.classList.remove('d-none');
+                    } else {
+                        badge.classList.add('d-none');
+                    }
+                }
+                if (stats.total_records) {
+                    document.getElementById('totalRecords').textContent = stats.total_records;
+                }
+            },
+            
+            async loadSectionContent(sectionId) {
+                switch(sectionId) {
+                    case 'dashboard':
+                        await this.loadDashboard();
+                        break;
+                    case 'users':
+                        await this.loadUsers();
+                        break;
+                    case 'applications':
+                        await this.loadApplications();
+                        break;
+                    case 'invitations':
+                        await this.loadInvitations();
+                        break;
+                    case 'records':
+                        await this.loadRecords();
+                        break;
+                    case 'logs':
+                        await this.loadLogs();
+                        break;
+                    default:
+                        console.log(`加载 ${sectionId} 内容`);
+                }
+            },
+            
+            async loadUsers() {
+                const contentDiv = document.getElementById('usersContent');
+                contentDiv.innerHTML = `
+                    <div class="card card-admin">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">用户列表</h5>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary me-2" id="refreshUsers">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" id="addUserBtn">
+                                    <i class="bi bi-plus-lg"></i> 添加用户
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-admin">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>用户名</th>
+                                            <th>用户类型</th>
+                                            <th>注册时间</th>
+                                            <th>最后登录</th>
+                                            <th>状态</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usersTableBody">
+                                        <tr>
+                                            <td colspan="7" class="text-center py-4">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">加载中...</span>
+                                                </div>
+                                                <p class="mt-2">正在加载用户数据...</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 加载用户数据
+                try {
+                    const result = await AdminAPI.getUsers();
+                    if (result.success) {
+                        this.renderUsersTable(result.users);
+                    }
+                } catch (error) {
+                    console.error('加载用户失败:', error);
+                }
+            },
+            
+            async loadApplications() {
+                const contentDiv = document.getElementById('applicationsContent');
+                contentDiv.innerHTML = `
+                    <div class="card card-admin">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">邀请码申请</h5>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-primary active" data-status="pending">
+                                    待处理
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" data-status="completed">
+                                    已批准
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-status="rejected">
+                                    已拒绝
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-admin">
+                                    <thead>
+                                        <tr>
+                                            <th>申请ID</th>
+                                            <th>用户名</th>
+                                            <th>邮箱</th>
+                                            <th>用途</th>
+                                            <th>申请时间</th>
+                                            <th>状态</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="applicationsTableBody">
+                                        <tr>
+                                            <td colspan="7" class="text-center py-4">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">加载中...</span>
+                                                </div>
+                                                <p class="mt-2">正在加载申请数据...</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 加载申请数据
+                await this.loadApplicationsData('pending');
+                
+                // 绑定状态切换按钮
+                contentDiv.querySelectorAll('[data-status]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const status = e.target.dataset.status;
+                        contentDiv.querySelectorAll('[data-status]').forEach(b => {
+                            b.classList.remove('active');
+                        });
+                        e.target.classList.add('active');
+                        this.loadApplicationsData(status);
+                    });
+                });
+            },
+            
+            async loadApplicationsData(status) {
+                try {
+                    const result = await AdminAPI.getApplications(status);
+                    if (result.success) {
+                        this.renderApplicationsTable(result.applications, status);
+                    }
+                } catch (error) {
+                    console.error('加载申请失败:', error);
+                }
+            },
+            
+            renderUsersTable(users) {
+                const tbody = document.getElementById('usersTableBody');
+                if (!users || users.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="text-center py-4">
+                                <i class="bi bi-people display-6 text-muted"></i>
+                                <p class="mt-2 text-muted">暂无用户数据</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                tbody.innerHTML = users.map(user => `
+                    <tr>
+                        <td>${user.id}</td>
+                        <td>
+                            <strong>${user.username}</strong>
+                            ${user.user_type === 'admin' ? 
+                                '<span class="badge bg-danger ms-1">管理员</span>' : 
+                                user.user_type === 'registered' ? 
+                                '<span class="badge bg-success ms-1">会员</span>' : 
+                                '<span class="badge bg-warning ms-1">试用</span>'
+                            }
+                        </td>
+                        <td>${user.user_type}</td>
+                        <td>${new Date(user.registration_date).toLocaleDateString()}</td>
+                        <td>${user.last_login ? new Date(user.last_login).toLocaleDateString() : '从未'}</td>
+                        <td>
+                            ${user.is_active ? 
+                                '<span class="badge bg-success">活跃</span>' : 
+                                '<span class="badge bg-secondary">禁用</span>'
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary action-btn" title="编辑">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger action-btn" title="删除" 
+                                    onclick="AdminUI.deleteUser(${user.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            },
+            
+            renderApplicationsTable(applications, status) {
+                const tbody = document.getElementById('applicationsTableBody');
+                if (!applications || applications.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="text-center py-4">
+                                <i class="bi bi-file-earmark-text display-6 text-muted"></i>
+                                <p class="mt-2 text-muted">暂无${this.getStatusText(status)}申请</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                tbody.innerHTML = applications.map(app => `
+                    <tr>
+                        <td><code>${app.application_id}</code></td>
+                        <td><strong>${app.username}</strong></td>
+                        <td>${app.email || '-'}</td>
+                        <td>${app.purpose}</td>
+                        <td>${new Date(app.created_at).toLocaleString()}</td>
+                        <td>
+                            ${app.status === 'pending' ? 
+                                '<span class="badge-status badge-pending">待处理</span>' :
+                            app.status === 'completed' ? 
+                                '<span class="badge-status badge-approved">已批准</span>' :
+                                '<span class="badge-status badge-rejected">已拒绝</span>'
+                            }
+                        </td>
+                        <td>
+                            ${app.status === 'pending' ? `
+                                <button class="btn btn-sm btn-success action-btn" 
+                                        onclick="AdminUI.reviewApplication('${app.application_id}', 'approve')"
+                                        title="批准">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger action-btn" 
+                                        onclick="AdminUI.reviewApplication('${app.application_id}', 'reject')"
+                                        title="拒绝">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-sm btn-info action-btn" title="查看详情">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            },
+            
+            getStatusText(status) {
+                const statusMap = {
+                    'pending': '待处理',
+                    'completed': '已批准', 
+                    'rejected': '已拒绝'
+                };
+                return statusMap[status] || status;
+            },
+            
+            async loadInvitations() {
+                const contentDiv = document.getElementById('invitationsContent');
+                contentDiv.innerHTML = `
+                    <div class="card card-admin">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">邀请码管理</h5>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#generateInvitesModal">
+                                <i class="bi bi-plus-lg me-1"></i> 生成邀请码
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle me-2"></i>
+                                邀请码用于用户注册，可以设置使用次数和有效期。
+                            </div>
+                            <div id="invitationsList" class="mt-3">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <p class="mt-2">正在加载邀请码数据...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+            
+            async reviewApplication(applicationId, action) {
+                if (!confirm(`确定要${action === 'approve' ? '批准' : '拒绝'}此申请吗？`)) {
+                    return;
+                }
+                
+                const notes = prompt('请输入审核备注（可选）：');
+                
+                try {
+                    AdminUI.showLoading();
+                    const result = await AdminAPI.reviewApplication(applicationId, action, notes);
+                    
+                    if (result.success) {
+                        alert(`申请已${action === 'approve' ? '批准' : '拒绝'}！`);
+                        // 刷新申请列表
+                        const activeTab = document.querySelector('[data-section="applications"]');
+                        if (activeTab.classList.contains('active')) {
+                            await this.loadApplicationsData('pending');
+                        }
+                    } else {
+                        alert('操作失败: ' + result.error);
+                    }
+                } catch (error) {
+                    alert('操作失败: ' + error.message);
+                } finally {
+                    AdminUI.hideLoading();
+                }
+            }
+        };
+
+        // ==================== 事件处理 ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化状态
+            const isAuthenticated = AdminState.init();
+            
+            if (isAuthenticated) {
+                AdminUI.showAdminDashboard();
+            } else {
+                AdminUI.showLoginPage();
+            }
+            
+            // 登录表单提交
+            document.getElementById('loginForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const username = document.getElementById('adminUsername').value.trim();
+                const password = document.getElementById('adminPassword').value;
+                
+                if (!username || !password) {
+                    AdminUI.showAlert('请输入用户名和密码');
+                    return;
+                }
+                
+                const loginBtn = document.querySelector('#loginForm button[type="submit"]');
+                const loginBtnText = document.getElementById('loginBtnText');
+                const loginLoading = document.getElementById('loginLoading');
+                
+                loginBtn.disabled = true;
+                loginBtnText.textContent = '登录中...';
+                loginLoading.classList.remove('d-none');
+                
+                try {
+                    const result = await AdminAPI.login(username, password);
+                    
+                    if (result.success) {
+                        AdminUI.showAdminDashboard();
+                    } else {
+                        AdminUI.showAlert(result.error || '登录失败');
+                    }
+                } catch (error) {
+                    AdminUI.showAlert('登录失败: ' + error.message);
+                } finally {
+                    loginBtn.disabled = false;
+                    loginBtnText.textContent = '登录';
+                    loginLoading.classList.add('d-none');
+                }
+            });
+            
+            // 侧边栏导航
+            document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const sectionId = this.dataset.section;
+                    AdminUI.showSection(sectionId);
+                });
+            });
+            
+            // 退出登录
+            document.getElementById('logoutBtn').addEventListener('click', function(e) {
+                e.preventDefault();
+                if (confirm('确定要退出登录吗？')) {
+                    AdminState.clearAuth();
+                    AdminUI.showLoginPage();
+                }
+            });
+            
+            // 刷新统计
+            document.getElementById('refreshStats').addEventListener('click', function() {
+                AdminUI.loadDashboard();
+            });
+            
+            // 生成邀请码按钮
+            document.getElementById('generateInvitesBtn').addEventListener('click', function() {
+                const modal = new bootstrap.Modal(document.getElementById('generateInvitesModal'));
+                modal.show();
+            });
+            
+            // 查看申请按钮
+            document.getElementById('viewAppsBtn').addEventListener('click', function() {
+                AdminUI.showSection('applications');
+            });
+            
+            // 系统日志按钮
+            document.getElementById('systemLogsBtn').addEventListener('click', function() {
+                AdminUI.showSection('logs');
+            });
+            
+            // 确认生成邀请码
+            document.getElementById('confirmGenerateBtn').addEventListener('click', async function() {
+                const count = parseInt(document.getElementById('inviteCount').value);
+                const purpose = document.getElementById('invitePurpose').value.trim();
+                const expiryDays = parseInt(document.getElementById('expiryDays').value);
+                const maxUses = parseInt(document.getElementById('maxUses').value);
+                
+                if (!purpose) {
+                    alert('请填写用途说明');
+                    return;
+                }
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('generateInvitesModal'));
+                
+                try {
+                    AdminUI.showLoading();
+                    
+                    const result = await AdminAPI.generateInvitationCodes({
+                        count,
+                        purpose,
+                        expiryDays,
+                        maxUses,
+                        createdBy: AdminState.adminInfo.username
+                    });
+                    
+                    if (result.success) {
+                        alert(`成功生成 ${result.count} 个邀请码！`);
+                        modal.hide();
+                        
+                        // 重置表单
+                        document.getElementById('generateInvitesForm').reset();
+                    } else {
+                        alert('生成失败: ' + result.error);
+                    }
+                } catch (error) {
+                    alert('生成失败: ' + error.message);
+                } finally {
+                    AdminUI.hideLoading();
+                }
+            });
+            
+            // 初始化显示控制面板
+            AdminUI.showSection('dashboard');
+        });
+    </script>
+</body>
+</html>
