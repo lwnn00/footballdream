@@ -243,7 +243,7 @@
 </head>
 <body>
     <!-- 登录页面 -->
-    <div id="loginPage" style="display: none;">
+    <div id="loginPage">
         <div class="login-container">
             <div class="login-header">
                 <h2>足球盘口管理系统</h2>
@@ -251,6 +251,10 @@
             </div>
             
             <div id="loginAlert" class="alert alert-danger d-none" role="alert"></div>
+            
+            <div id="connectionStatus" class="alert alert-info d-none" role="alert">
+                正在检查API连接...
+            </div>
             
             <form id="loginForm">
                 <div class="mb-3">
@@ -265,8 +269,20 @@
                            placeholder="请输入密码" required>
                 </div>
                 
+                <div class="mb-3">
+                    <label for="apiUrl" class="form-label">API服务器地址</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="apiUrl" 
+                               placeholder="例如: https://footballdream.vercel.app">
+                        <button class="btn btn-outline-secondary" type="button" id="testApiBtn">
+                            <i class="bi bi-plug"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">如果API服务器不是默认地址，请在此修改</div>
+                </div>
+                
                 <div class="mb-3 form-check">
-                    <input type="checkbox" class="form-check-input" id="rememberMe">
+                    <input type="checkbox" class="form-check-input" id="rememberMe" checked>
                     <label class="form-check-label" for="rememberMe">记住我</label>
                 </div>
                 
@@ -285,7 +301,7 @@
     </div>
     
     <!-- 管理后台 -->
-    <div id="adminDashboard" style="display: none;">
+    <div id="adminDashboard" class="d-none">
         <!-- 顶部导航栏 -->
         <nav class="navbar navbar-admin navbar-expand-lg">
             <div class="container-fluid">
@@ -295,6 +311,11 @@
                 </a>
                 
                 <div class="navbar-nav ms-auto">
+                    <div class="nav-item me-3">
+                        <small class="text-white">
+                            API: <span id="currentApiUrl" class="badge bg-light text-dark"></span>
+                        </small>
+                    </div>
                     <div class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" 
                            role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -356,21 +377,15 @@
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="#" data-section="statistics">
-                                    <i class="bi bi-bar-chart"></i>
-                                    统计分析
-                                </a>
-                            </li>
-                            <li class="nav-item">
                                 <a class="nav-link" href="#" data-section="logs">
                                     <i class="bi bi-journal-text"></i>
                                     操作日志
                                 </a>
                             </li>
-                            <li class="nav-item mt-4">
-                                <a class="nav-link" href="#" data-section="settings">
-                                    <i class="bi bi-shield-check"></i>
-                                    系统安全
+                            <li class="nav-item">
+                                <a class="nav-link" href="#" data-section="tools">
+                                    <i class="bi bi-tools"></i>
+                                    系统工具
                                 </a>
                             </li>
                         </ul>
@@ -384,9 +399,14 @@
                         <div id="dashboardSection" class="content-section">
                             <div class="d-flex justify-content-between align-items-center mb-4">
                                 <h4><i class="bi bi-speedometer2 me-2"></i>系统概览</h4>
-                                <button class="btn btn-sm btn-outline-primary" id="refreshStats">
-                                    <i class="bi bi-arrow-clockwise"></i> 刷新
-                                </button>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-info me-2" id="apiStatusBtn">
+                                        <i class="bi bi-plug"></i> API状态
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary" id="refreshStats">
+                                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- 统计卡片 -->
@@ -455,9 +475,9 @@
                                             </button>
                                         </div>
                                         <div class="col-md-3 col-6 mb-3">
-                                            <button class="btn btn-outline-warning w-100" id="systemLogsBtn">
-                                                <i class="bi bi-list-check me-2"></i>
-                                                系统日志
+                                            <button class="btn btn-outline-warning w-100" id="systemToolsBtn">
+                                                <i class="bi bi-tools me-2"></i>
+                                                系统工具
                                             </button>
                                         </div>
                                     </div>
@@ -483,7 +503,7 @@
                         </div>
                         
                         <!-- 用户管理 -->
-                        <div id="usersSection" class="content-section" style="display: none;">
+                        <div id="usersSection" class="content-section d-none">
                             <h4 class="mb-4"><i class="bi bi-people me-2"></i>用户管理</h4>
                             <div id="usersContent">
                                 <!-- 用户管理内容将通过JavaScript动态加载 -->
@@ -491,7 +511,7 @@
                         </div>
                         
                         <!-- 邀请码管理 -->
-                        <div id="invitationsSection" class="content-section" style="display: none;">
+                        <div id="invitationsSection" class="content-section d-none">
                             <h4 class="mb-4"><i class="bi bi-ticket-perforated me-2"></i>邀请码管理</h4>
                             <div id="invitationsContent">
                                 <!-- 邀请码管理内容将通过JavaScript动态加载 -->
@@ -499,7 +519,7 @@
                         </div>
                         
                         <!-- 申请管理 -->
-                        <div id="applicationsSection" class="content-section" style="display: none;">
+                        <div id="applicationsSection" class="content-section d-none">
                             <h4 class="mb-4"><i class="bi bi-file-earmark-text me-2"></i>申请管理</h4>
                             <div id="applicationsContent">
                                 <!-- 申请管理内容将通过JavaScript动态加载 -->
@@ -507,34 +527,26 @@
                         </div>
                         
                         <!-- 记录管理 -->
-                        <div id="recordsSection" class="content-section" style="display: none;">
+                        <div id="recordsSection" class="content-section d-none">
                             <h4 class="mb-4"><i class="bi bi-clipboard-data me-2"></i>记录管理</h4>
                             <div id="recordsContent">
                                 <!-- 记录管理内容将通过JavaScript动态加载 -->
                             </div>
                         </div>
                         
-                        <!-- 统计分析 -->
-                        <div id="statisticsSection" class="content-section" style="display: none;">
-                            <h4 class="mb-4"><i class="bi bi-bar-chart me-2"></i>统计分析</h4>
-                            <div id="statisticsContent">
-                                <!-- 统计分析内容将通过JavaScript动态加载 -->
-                            </div>
-                        </div>
-                        
                         <!-- 操作日志 -->
-                        <div id="logsSection" class="content-section" style="display: none;">
+                        <div id="logsSection" class="content-section d-none">
                             <h4 class="mb-4"><i class="bi bi-journal-text me-2"></i>操作日志</h4>
                             <div id="logsContent">
                                 <!-- 日志内容将通过JavaScript动态加载 -->
                             </div>
                         </div>
                         
-                        <!-- 系统安全 -->
-                        <div id="settingsSection" class="content-section" style="display: none;">
-                            <h4 class="mb-4"><i class="bi bi-shield-check me-2"></i>系统安全设置</h4>
-                            <div id="settingsContent">
-                                <!-- 系统设置内容将通过JavaScript动态加载 -->
+                        <!-- 系统工具 -->
+                        <div id="toolsSection" class="content-section d-none">
+                            <h4 class="mb-4"><i class="bi bi-tools me-2"></i>系统工具</h4>
+                            <div id="toolsContent">
+                                <!-- 工具内容将通过JavaScript动态加载 -->
                             </div>
                         </div>
                     </div>
@@ -584,6 +596,36 @@
         </div>
     </div>
 
+    <!-- API配置模态框 -->
+    <div class="modal fade" id="apiConfigModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">API服务器配置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="apiConfigForm">
+                        <div class="mb-3">
+                            <label for="configApiUrl" class="form-label">API服务器地址</label>
+                            <input type="text" class="form-control" id="configApiUrl" 
+                                   placeholder="例如: https://footballdream.vercel.app">
+                            <div class="form-text">请填写完整的API服务器URL（包括http://或https://）</div>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            当前API地址: <span id="currentApiDisplay" class="fw-bold"></span>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveApiConfigBtn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 加载遮罩 -->
     <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-none" 
          style="z-index: 9999;">
@@ -596,21 +638,82 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // ==================== 全局配置 ====================
-        const CONFIG = {
-            API_BASE_URL: window.location.hostname === 'localhost' 
-                ? 'http://localhost:3000' 
-                : 'https://footballdream.vercel.app',
+        const AppConfig = {
+            // 默认API地址（可以根据部署环境修改）
+            DEFAULT_API_URL: 'https://footballdream.vercel.app',
             
-            ADMIN_ENDPOINTS: {
+            // 本地开发环境的API地址
+            LOCAL_API_URL: 'http://localhost:3000',
+            
+            // API端点配置
+            ENDPOINTS: {
+                // 公共端点
+                test: '/api/test',
                 login: '/api/login',
-                users: '/api/admin/users',
-                stats: '/api/admin/stats',
-                generateCodes: '/api/admin/generate-codes',
-                applications: '/api/admin/applications',
-                invitations: '/api/admin/invitations',
-                records: '/api/admin/records',
-                logs: '/api/admin/logs',
-                settings: '/api/admin/settings'
+                validateCode: '/api/validate-code',
+                checkTables: '/api/check-tables',
+                invitationCodes: '/api/invitation-codes',
+                invitationApply: '/api/invitation/apply',
+                invitationCheck: '/api/invitation/check/:id',
+                
+                // 管理员端点
+                adminStats: '/api/admin/stats',
+                adminUsers: '/api/admin/users',
+                adminUserUpdate: '/api/admin/users/:id',
+                adminUserDelete: '/api/admin/users/:id',
+                adminApplications: '/api/admin/applications',
+                adminReviewApplication: '/api/admin/applications/:id/review',
+                adminGenerateCodes: '/api/admin/generate-codes',
+                adminInvitationStats: '/api/admin/invitation-stats',
+                adminExport: '/api/admin/export/:type',
+                adminLogs: '/api/admin/logs',
+                adminClearLogs: '/api/admin/logs',
+                adminRepairTables: '/api/admin/repair-tables',
+                
+                // 用户端点
+                userInfo: '/api/user/info',
+                userHistory: '/api/history',
+                userRecords: '/api/records',
+                userStats: '/api/stats',
+                userSync: '/api/sync'
+            },
+            
+            // 获取当前API地址
+            getApiUrl() {
+                // 优先使用本地存储的配置
+                const savedUrl = localStorage.getItem('admin_api_url');
+                if (savedUrl) return savedUrl;
+                
+                // 开发环境使用本地API
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    return this.LOCAL_API_URL;
+                }
+                
+                // 生产环境使用默认API
+                return this.DEFAULT_API_URL;
+            },
+            
+            // 保存API地址
+            setApiUrl(url) {
+                // 确保URL格式正确
+                let apiUrl = url.trim();
+                if (apiUrl && !apiUrl.startsWith('http')) {
+                    apiUrl = 'https://' + apiUrl;
+                }
+                localStorage.setItem('admin_api_url', apiUrl);
+                return apiUrl;
+            },
+            
+            // 获取完整的API路径
+            getApiPath(endpoint, params = {}) {
+                let path = endpoint;
+                
+                // 替换路径参数
+                Object.keys(params).forEach(key => {
+                    path = path.replace(`:${key}`, params[key]);
+                });
+                
+                return `${this.getApiUrl()}${path}`;
             }
         };
 
@@ -629,6 +732,7 @@
                         this.adminInfo = JSON.parse(savedAdmin);
                         this.isAuthenticated = true;
                     } catch (e) {
+                        console.error('解析管理员信息失败:', e);
                         this.clearAuth();
                     }
                 }
@@ -655,133 +759,297 @@
             },
             
             getAuthHeader() {
-                return {
-                    'Authorization': `Bearer ${this.authToken}`,
-                    'Content-Type': 'application/json'
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 };
+                
+                if (this.authToken) {
+                    headers['Authorization'] = `Bearer ${this.authToken}`;
+                }
+                
+                return headers;
             }
         };
 
         // ==================== API服务 ====================
         const AdminAPI = {
-            async request(endpoint, method = 'GET', data = null) {
-                const url = `${CONFIG.API_BASE_URL}${endpoint}`;
+            async request(endpoint, method = 'GET', data = null, params = {}) {
+                const url = AppConfig.getApiPath(endpoint, params);
                 const options = {
                     method,
                     headers: AdminState.getAuthHeader(),
-                    body: data ? JSON.stringify(data) : null
+                    mode: 'cors',
+                    credentials: 'omit' // 如果API服务器需要cookie，可以改为'include'
                 };
+                
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
                 
                 try {
                     console.log(`API请求: ${method} ${url}`, data);
+                    
                     const response = await fetch(url, options);
                     
+                    // 处理认证错误
                     if (response.status === 401 || response.status === 403) {
-                        // 认证失败，清除状态
                         AdminState.clearAuth();
-                        showLoginPage();
-                        throw new Error('认证失效，请重新登录');
+                        AdminUI.showLoginPage();
+                        AdminUI.showAlert('认证已失效，请重新登录', 'warning');
+                        throw new Error('认证失效');
                     }
                     
+                    // 检查响应状态
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                        let errorMsg = `HTTP ${response.status}`;
+                        try {
+                            const errorData = await response.json();
+                            errorMsg = errorData.error || errorMsg;
+                        } catch (e) {
+                            // 忽略解析错误
+                        }
+                        throw new Error(errorMsg);
                     }
                     
-                    return await response.json();
+                    // 解析响应数据
+                    const result = await response.json();
+                    
+                    // 检查API响应格式
+                    if (result && typeof result === 'object') {
+                        return result;
+                    } else {
+                        throw new Error('API响应格式错误');
+                    }
+                    
                 } catch (error) {
                     console.error('API请求失败:', error);
+                    
+                    // 如果是网络错误，显示连接问题
+                    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                        AdminUI.showAlert('无法连接到API服务器，请检查网络连接或API地址', 'danger');
+                    } else {
+                        AdminUI.showAlert(`请求失败: ${error.message}`, 'danger');
+                    }
+                    
                     throw error;
                 }
             },
             
-            async login(username, password) {
-                const response = await fetch(`${CONFIG.API_BASE_URL}/api/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success && result.user.userType === 'admin') {
-                    AdminState.saveAuth(result.token, result.user);
-                    return { success: true, user: result.user };
-                } else if (result.success && result.user.userType !== 'admin') {
-                    return { success: false, error: '非管理员账户' };
-                } else {
-                    return { success: false, error: result.error || '登录失败' };
+            // 测试API连接
+            async testConnection() {
+                try {
+                    const response = await fetch(AppConfig.getApiPath(AppConfig.ENDPOINTS.test), {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    return {
+                        success: result.success === true,
+                        message: result.message || 'API连接正常',
+                        timestamp: result.timestamp
+                    };
+                } catch (error) {
+                    console.error('API连接测试失败:', error);
+                    return {
+                        success: false,
+                        message: `连接失败: ${error.message}`,
+                        error: error
+                    };
                 }
             },
             
-            async getStats() {
-                return this.request('/api/admin/stats');
-            },
-            
-            async getUsers(page = 1, limit = 20) {
-                return this.request(`/api/admin/users?page=${page}&limit=${limit}`);
-            },
-            
-            async getApplications(status = 'pending', page = 1, limit = 20) {
-                return this.request(`/api/admin/applications?status=${status}&page=${page}&limit=${limit}`);
-            },
-            
-            async generateInvitationCodes(data) {
-                return this.request('/api/admin/generate-codes', 'POST', data);
-            },
-            
-            async reviewApplication(applicationId, action, notes) {
-                return this.request(`/api/admin/applications/${applicationId}/review`, 'POST', {
-                    action,
-                    reviewNotes: notes
+            // 管理员登录
+            async login(username, password) {
+                const result = await this.request(AppConfig.ENDPOINTS.login, 'POST', {
+                    username,
+                    password
                 });
+                
+                if (result.success && result.user.userType === 'admin') {
+                    AdminState.saveAuth(result.token, result.user);
+                    return { 
+                        success: true, 
+                        user: result.user,
+                        token: result.token
+                    };
+                } else if (result.success && result.user.userType !== 'admin') {
+                    return { 
+                        success: false, 
+                        error: '此账户不是管理员账户' 
+                    };
+                } else {
+                    return { 
+                        success: false, 
+                        error: result.error || '登录失败' 
+                    };
+                }
             },
             
+            // 获取统计信息
+            async getStats() {
+                return this.request(AppConfig.ENDPOINTS.adminStats);
+            },
+            
+            // 获取用户列表
+            async getUsers(page = 1, limit = 20, search = '', userType = '') {
+                let query = `?page=${page}&limit=${limit}`;
+                if (search) query += `&search=${encodeURIComponent(search)}`;
+                if (userType) query += `&user_type=${userType}`;
+                
+                return this.request(AppConfig.ENDPOINTS.adminUsers + query);
+            },
+            
+            // 获取申请列表
+            async getApplications(status = 'pending', page = 1, limit = 20) {
+                return this.request(`${AppConfig.ENDPOINTS.adminApplications}?status=${status}&page=${page}&limit=${limit}`);
+            },
+            
+            // 审核申请
+            async reviewApplication(applicationId, action, reviewNotes = '') {
+                return this.request(
+                    AppConfig.ENDPOINTS.adminReviewApplication.replace(':id', applicationId),
+                    'POST',
+                    {
+                        action,
+                        review_notes: reviewNotes
+                    }
+                );
+            },
+            
+            // 生成邀请码
+            async generateInvitationCodes(data) {
+                return this.request(AppConfig.ENDPOINTS.adminGenerateCodes, 'POST', data);
+            },
+            
+            // 获取操作日志
             async getLogs(page = 1, limit = 50) {
-                return this.request(`/api/admin/logs?page=${page}&limit=${limit}`);
+                return this.request(`${AppConfig.ENDPOINTS.adminLogs}?page=${page}&limit=${limit}`);
+            },
+            
+            // 导出数据
+            async exportData(type, format = 'json') {
+                const endpoint = AppConfig.ENDPOINTS.adminExport.replace(':type', type);
+                return this.request(`${endpoint}?format=${format}`);
+            },
+            
+            // 修复表结构
+            async repairTables() {
+                return this.request(AppConfig.ENDPOINTS.adminRepairTables, 'POST');
+            },
+            
+            // 检查表结构
+            async checkTables() {
+                return this.request(AppConfig.ENDPOINTS.checkTables);
             }
         };
 
         // ==================== UI控制 ====================
         const AdminUI = {
-            showLoading() {
-                document.getElementById('loadingOverlay').classList.remove('d-none');
+            // 显示/隐藏加载遮罩
+            showLoading(text = '正在处理，请稍候...') {
+                let overlay = document.getElementById('loadingOverlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'loadingOverlay';
+                    overlay.className = 'position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-none';
+                    overlay.style.zIndex = '9999';
+                    overlay.innerHTML = `
+                        <div class="position-absolute top-50 start-50 translate-middle text-center">
+                            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+                            <p class="mt-3">${text}</p>
+                        </div>
+                    `;
+                    document.body.appendChild(overlay);
+                } else {
+                    const p = overlay.querySelector('p');
+                    if (p) p.textContent = text;
+                }
+                overlay.classList.remove('d-none');
             },
             
             hideLoading() {
-                document.getElementById('loadingOverlay').classList.add('d-none');
+                const overlay = document.getElementById('loadingOverlay');
+                if (overlay) overlay.classList.add('d-none');
             },
             
+            // 显示/隐藏登录页面和管理面板
             showLoginPage() {
                 document.getElementById('loginPage').style.display = 'block';
                 document.getElementById('adminDashboard').style.display = 'none';
+                
+                // 显示当前API地址
+                const apiUrlInput = document.getElementById('apiUrl');
+                if (apiUrlInput) {
+                    apiUrlInput.value = AppConfig.getApiUrl();
+                }
             },
             
             showAdminDashboard() {
                 document.getElementById('loginPage').style.display = 'none';
                 document.getElementById('adminDashboard').style.display = 'block';
                 
+                // 显示当前管理员信息
                 if (AdminState.adminInfo) {
                     document.getElementById('currentAdminName').textContent = 
                         AdminState.adminInfo.username;
                 }
                 
-                // 加载控制面板
+                // 显示当前API地址
+                document.getElementById('currentApiUrl').textContent = 
+                    AppConfig.getApiUrl().replace(/^https?:\/\//, '');
+                
+                // 初始化加载控制面板
                 this.loadDashboard();
             },
             
-            showAlert(message, type = 'danger') {
-                const alertDiv = document.getElementById('loginAlert');
-                alertDiv.textContent = message;
-                alertDiv.className = `alert alert-${type}`;
-                alertDiv.classList.remove('d-none');
+            // 显示消息提示
+            showAlert(message, type = 'danger', duration = 5000) {
+                // 创建消息容器（如果不存在）
+                let alertContainer = document.getElementById('alertContainer');
+                if (!alertContainer) {
+                    alertContainer = document.createElement('div');
+                    alertContainer.id = 'alertContainer';
+                    alertContainer.className = 'position-fixed top-0 start-50 translate-middle-x mt-3';
+                    alertContainer.style.zIndex = '9998';
+                    document.body.appendChild(alertContainer);
+                }
                 
-                // 3秒后自动隐藏
-                setTimeout(() => {
-                    alertDiv.classList.add('d-none');
-                }, 3000);
+                // 创建消息元素
+                const alertId = 'alert-' + Date.now();
+                const alertDiv = document.createElement('div');
+                alertDiv.id = alertId;
+                alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+                alertDiv.style.minWidth = '300px';
+                alertDiv.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi ${type === 'success' ? 'bi-check-circle' : 
+                                          type === 'warning' ? 'bi-exclamation-triangle' : 
+                                          type === 'info' ? 'bi-info-circle' : 'bi-exclamation-circle'} me-2"></i>
+                        <div class="flex-grow-1">${message}</div>
+                        <button type="button" class="btn-close ms-2" onclick="document.getElementById('${alertId}').remove()"></button>
+                    </div>
+                `;
+                
+                alertContainer.appendChild(alertDiv);
+                
+                // 自动消失
+                if (duration > 0) {
+                    setTimeout(() => {
+                        const alertEl = document.getElementById(alertId);
+                        if (alertEl) alertEl.remove();
+                    }, duration);
+                }
+                
+                return alertDiv;
             },
             
+            // 显示不同部分的内容
             showSection(sectionId) {
                 // 隐藏所有内容区
                 document.querySelectorAll('.content-section').forEach(section => {
@@ -809,41 +1077,102 @@
                 }
             },
             
+            // 加载控制面板
             async loadDashboard() {
                 try {
+                    // 先测试API连接
+                    const testResult = await AdminAPI.testConnection();
+                    if (!testResult.success) {
+                        this.showAlert(`API连接失败: ${testResult.message}`, 'warning');
+                        return;
+                    }
+                    
+                    // 加载统计信息
                     const stats = await AdminAPI.getStats();
                     if (stats.success) {
                         this.updateStats(stats.stats);
+                        this.updateRecentActivity(stats.stats.recent_activity);
+                    } else {
+                        this.showAlert('获取统计信息失败', 'danger');
                     }
                 } catch (error) {
                     console.error('加载控制面板失败:', error);
+                    this.showAlert('加载失败: ' + error.message, 'danger');
                 }
             },
             
+            // 更新统计卡片
             updateStats(stats) {
-                if (stats.total_users) {
-                    document.getElementById('totalUsers').textContent = stats.total_users;
+                if (!stats) return;
+                
+                // 更新用户统计
+                if (stats.users?.total !== undefined) {
+                    document.getElementById('totalUsers').textContent = stats.users.total;
                 }
-                if (stats.active_invites) {
-                    document.getElementById('activeInvites').textContent = stats.active_invites;
+                
+                // 更新邀请码统计
+                if (stats.invitations?.active !== undefined) {
+                    document.getElementById('activeInvites').textContent = stats.invitations.active;
                 }
-                if (stats.pending_apps) {
-                    document.getElementById('pendingApps').textContent = stats.pending_apps;
+                
+                // 更新申请统计
+                if (stats.applications?.pending !== undefined) {
+                    document.getElementById('pendingApps').textContent = stats.applications.pending;
                     
                     // 更新侧边栏徽章
                     const badge = document.getElementById('pendingBadge');
-                    if (stats.pending_apps > 0) {
-                        badge.textContent = stats.pending_apps;
+                    if (stats.applications.pending > 0) {
+                        badge.textContent = stats.applications.pending;
                         badge.classList.remove('d-none');
                     } else {
                         badge.classList.add('d-none');
                     }
                 }
-                if (stats.total_records) {
-                    document.getElementById('totalRecords').textContent = stats.total_records;
+                
+                // 更新记录统计
+                if (stats.records?.total !== undefined) {
+                    document.getElementById('totalRecords').textContent = stats.records.total;
                 }
             },
             
+            // 更新最近活动
+            updateRecentActivity(activities) {
+                const container = document.getElementById('recentActivity');
+                if (!container) return;
+                
+                if (!activities || activities.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="bi bi-activity display-6 text-muted"></i>
+                            <p class="mt-2 text-muted">暂无活动记录</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const activityItems = activities.map(activity => `
+                    <div class="d-flex align-items-start mb-3">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" 
+                                 style="width: 40px; height: 40px;">
+                                <i class="bi bi-person text-primary"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <div class="d-flex justify-content-between">
+                                <strong>${activity.admin_name || '系统'}</strong>
+                                <small class="text-muted">${new Date(activity.created_at).toLocaleString()}</small>
+                            </div>
+                            <div class="text-muted">${activity.description}</div>
+                            <small class="text-muted">${activity.action_type} • ${activity.ip_address || '未知IP'}</small>
+                        </div>
+                    </div>
+                `).join('');
+                
+                container.innerHTML = activityItems;
+            },
+            
+            // 加载不同部分的内容
             async loadSectionContent(sectionId) {
                 switch(sectionId) {
                     case 'dashboard':
@@ -858,79 +1187,259 @@
                     case 'invitations':
                         await this.loadInvitations();
                         break;
-                    case 'records':
-                        await this.loadRecords();
-                        break;
                     case 'logs':
                         await this.loadLogs();
+                        break;
+                    case 'tools':
+                        await this.loadTools();
                         break;
                     default:
                         console.log(`加载 ${sectionId} 内容`);
                 }
             },
             
+            // 加载用户管理页面
             async loadUsers() {
                 const contentDiv = document.getElementById('usersContent');
                 contentDiv.innerHTML = `
                     <div class="card card-admin">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">用户列表</h5>
-                            <div>
-                                <button class="btn btn-sm btn-outline-primary me-2" id="refreshUsers">
+                            <h5 class="mb-0">用户管理</h5>
+                            <div class="d-flex gap-2">
+                                <div class="input-group input-group-sm" style="width: 300px;">
+                                    <input type="text" class="form-control" id="userSearch" placeholder="搜索用户名或邮箱">
+                                    <button class="btn btn-outline-secondary" type="button" id="searchUsersBtn">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary" id="refreshUsersBtn">
                                     <i class="bi bi-arrow-clockwise"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-success" id="addUserBtn">
-                                    <i class="bi bi-plus-lg"></i> 添加用户
                                 </button>
                             </div>
                         </div>
                         <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-admin">
-                                    <thead>
-                                        <tr>
-                                            <th>ID</th>
-                                            <th>用户名</th>
-                                            <th>用户类型</th>
-                                            <th>注册时间</th>
-                                            <th>最后登录</th>
-                                            <th>状态</th>
-                                            <th>操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="usersTableBody">
-                                        <tr>
-                                            <td colspan="7" class="text-center py-4">
-                                                <div class="spinner-border text-primary" role="status">
-                                                    <span class="visually-hidden">加载中...</span>
-                                                </div>
-                                                <p class="mt-2">正在加载用户数据...</p>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div id="usersTableContainer">
+                                <div class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <p class="mt-2">正在加载用户数据...</p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 `;
                 
                 // 加载用户数据
+                await this.loadUsersData();
+                
+                // 绑定搜索事件
+                document.getElementById('searchUsersBtn')?.addEventListener('click', () => {
+                    this.loadUsersData();
+                });
+                
+                document.getElementById('userSearch')?.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.loadUsersData();
+                    }
+                });
+                
+                // 绑定刷新事件
+                document.getElementById('refreshUsersBtn')?.addEventListener('click', () => {
+                    this.loadUsersData();
+                });
+            },
+            
+            // 加载用户数据
+            async loadUsersData() {
+                const search = document.getElementById('userSearch')?.value || '';
+                const container = document.getElementById('usersTableContainer');
+                
                 try {
-                    const result = await AdminAPI.getUsers();
+                    this.showLoading('正在加载用户数据...');
+                    const result = await AdminAPI.getUsers(1, 20, search);
+                    
                     if (result.success) {
-                        this.renderUsersTable(result.users);
+                        this.renderUsersTable(result.users, result.pagination);
+                    } else {
+                        container.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                加载用户数据失败: ${result.error}
+                            </div>
+                        `;
                     }
                 } catch (error) {
-                    console.error('加载用户失败:', error);
+                    container.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            加载用户数据失败: ${error.message}
+                        </div>
+                    `;
+                } finally {
+                    this.hideLoading();
                 }
             },
             
+            // 渲染用户表格
+            renderUsersTable(users, pagination) {
+                const container = document.getElementById('usersTableContainer');
+                
+                if (!users || users.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-people display-6 text-muted"></i>
+                            <p class="mt-2 text-muted">暂无用户数据</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const tableHtml = `
+                    <div class="table-responsive">
+                        <table class="table table-admin table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户名</th>
+                                    <th>邮箱</th>
+                                    <th>用户类型</th>
+                                    <th>注册时间</th>
+                                    <th>最后登录</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${users.map(user => `
+                                    <tr>
+                                        <td>${user.id}</td>
+                                        <td>
+                                            <strong>${user.username}</strong>
+                                            ${user.user_type === 'admin' ? 
+                                                '<span class="badge bg-danger ms-1">管理员</span>' : 
+                                                user.user_type === 'registered' ? 
+                                                '<span class="badge bg-success ms-1">会员</span>' : 
+                                                '<span class="badge bg-warning ms-1">试用</span>'
+                                            }
+                                        </td>
+                                        <td>${user.email || '-'}</td>
+                                        <td>${user.user_type}</td>
+                                        <td>${new Date(user.registration_date || user.created_at).toLocaleDateString()}</td>
+                                        <td>${user.last_login ? new Date(user.last_login).toLocaleDateString() : '从未登录'}</td>
+                                        <td>
+                                            ${user.is_active ? 
+                                                '<span class="badge bg-success">活跃</span>' : 
+                                                '<span class="badge bg-secondary">禁用</span>'
+                                            }
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary action-btn" 
+                                                    onclick="AdminUI.editUser(${user.id})"
+                                                    title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger action-btn" 
+                                                    onclick="AdminUI.deleteUser(${user.id}, '${user.username}')"
+                                                    title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    ${pagination ? `
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="text-muted">
+                                第 ${pagination.page} 页，共 ${pagination.total_pages} 页，总计 ${pagination.total} 条记录
+                            </div>
+                            <nav>
+                                <ul class="pagination pagination-sm">
+                                    <li class="page-item ${pagination.page === 1 ? 'disabled' : ''}">
+                                        <a class="page-link" href="#" onclick="AdminUI.loadUsersPage(${pagination.page - 1})">上一页</a>
+                                    </li>
+                                    ${Array.from({length: Math.min(5, pagination.total_pages)}, (_, i) => {
+                                        const pageNum = i + 1;
+                                        return `
+                                            <li class="page-item ${pageNum === pagination.page ? 'active' : ''}">
+                                                <a class="page-link" href="#" onclick="AdminUI.loadUsersPage(${pageNum})">${pageNum}</a>
+                                            </li>
+                                        `;
+                                    }).join('')}
+                                    <li class="page-item ${pagination.page === pagination.total_pages ? 'disabled' : ''}">
+                                        <a class="page-link" href="#" onclick="AdminUI.loadUsersPage(${pagination.page + 1})">下一页</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    ` : ''}
+                `;
+                
+                container.innerHTML = tableHtml;
+            },
+            
+            // 加载用户分页
+            async loadUsersPage(page) {
+                const search = document.getElementById('userSearch')?.value || '';
+                const container = document.getElementById('usersTableContainer');
+                
+                try {
+                    this.showLoading('正在加载用户数据...');
+                    const result = await AdminAPI.getUsers(page, 20, search);
+                    
+                    if (result.success) {
+                        this.renderUsersTable(result.users, result.pagination);
+                    }
+                } catch (error) {
+                    this.showAlert('加载用户数据失败: ' + error.message, 'danger');
+                } finally {
+                    this.hideLoading();
+                }
+            },
+            
+            // 编辑用户
+            editUser(userId) {
+                this.showAlert('编辑用户功能正在开发中', 'info');
+            },
+            
+            // 删除用户
+            async deleteUser(userId, username) {
+                if (!confirm(`确定要删除用户 "${username}" (ID: ${userId}) 吗？此操作不可撤销！`)) {
+                    return;
+                }
+                
+                try {
+                    this.showLoading('正在删除用户...');
+                    
+                    const result = await AdminAPI.request(
+                        AppConfig.ENDPOINTS.adminUserDelete.replace(':id', userId),
+                        'DELETE'
+                    );
+                    
+                    if (result.success) {
+                        this.showAlert(`用户 "${username}" 删除成功`, 'success');
+                        // 刷新用户列表
+                        await this.loadUsersData();
+                    } else {
+                        this.showAlert(`删除失败: ${result.error}`, 'danger');
+                    }
+                } catch (error) {
+                    this.showAlert(`删除失败: ${error.message}`, 'danger');
+                } finally {
+                    this.hideLoading();
+                }
+            },
+            
+            // 加载申请管理页面
             async loadApplications() {
                 const contentDiv = document.getElementById('applicationsContent');
                 contentDiv.innerHTML = `
                     <div class="card card-admin">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">邀请码申请</h5>
+                            <h5 class="mb-0">邀请码申请管理</h5>
                             <div class="btn-group" role="group">
                                 <button type="button" class="btn btn-sm btn-outline-primary active" data-status="pending">
                                     待处理
@@ -944,30 +1453,13 @@
                             </div>
                         </div>
                         <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-admin">
-                                    <thead>
-                                        <tr>
-                                            <th>申请ID</th>
-                                            <th>用户名</th>
-                                            <th>邮箱</th>
-                                            <th>用途</th>
-                                            <th>申请时间</th>
-                                            <th>状态</th>
-                                            <th>操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="applicationsTableBody">
-                                        <tr>
-                                            <td colspan="7" class="text-center py-4">
-                                                <div class="spinner-border text-primary" role="status">
-                                                    <span class="visually-hidden">加载中...</span>
-                                                </div>
-                                                <p class="mt-2">正在加载申请数据...</p>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div id="applicationsTableContainer">
+                                <div class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <p class="mt-2">正在加载申请数据...</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -989,115 +1481,110 @@
                 });
             },
             
+            // 加载申请数据
             async loadApplicationsData(status) {
+                const container = document.getElementById('applicationsTableContainer');
+                
                 try {
+                    this.showLoading('正在加载申请数据...');
                     const result = await AdminAPI.getApplications(status);
+                    
                     if (result.success) {
-                        this.renderApplicationsTable(result.applications, status);
+                        this.renderApplicationsTable(result.applications, status, result.pagination);
+                    } else {
+                        container.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                加载申请数据失败: ${result.error}
+                            </div>
+                        `;
                     }
                 } catch (error) {
-                    console.error('加载申请失败:', error);
-                }
-            },
-            
-            renderUsersTable(users) {
-                const tbody = document.getElementById('usersTableBody');
-                if (!users || users.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="7" class="text-center py-4">
-                                <i class="bi bi-people display-6 text-muted"></i>
-                                <p class="mt-2 text-muted">暂无用户数据</p>
-                            </td>
-                        </tr>
+                    container.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            加载申请数据失败: ${error.message}
+                        </div>
                     `;
-                    return;
+                } finally {
+                    this.hideLoading();
                 }
-                
-                tbody.innerHTML = users.map(user => `
-                    <tr>
-                        <td>${user.id}</td>
-                        <td>
-                            <strong>${user.username}</strong>
-                            ${user.user_type === 'admin' ? 
-                                '<span class="badge bg-danger ms-1">管理员</span>' : 
-                                user.user_type === 'registered' ? 
-                                '<span class="badge bg-success ms-1">会员</span>' : 
-                                '<span class="badge bg-warning ms-1">试用</span>'
-                            }
-                        </td>
-                        <td>${user.user_type}</td>
-                        <td>${new Date(user.registration_date).toLocaleDateString()}</td>
-                        <td>${user.last_login ? new Date(user.last_login).toLocaleDateString() : '从未'}</td>
-                        <td>
-                            ${user.is_active ? 
-                                '<span class="badge bg-success">活跃</span>' : 
-                                '<span class="badge bg-secondary">禁用</span>'
-                            }
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary action-btn" title="编辑">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger action-btn" title="删除" 
-                                    onclick="AdminUI.deleteUser(${user.id})">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
             },
             
-            renderApplicationsTable(applications, status) {
-                const tbody = document.getElementById('applicationsTableBody');
+            // 渲染申请表格
+            renderApplicationsTable(applications, status, pagination) {
+                const container = document.getElementById('applicationsTableContainer');
+                
                 if (!applications || applications.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="7" class="text-center py-4">
-                                <i class="bi bi-file-earmark-text display-6 text-muted"></i>
-                                <p class="mt-2 text-muted">暂无${this.getStatusText(status)}申请</p>
-                            </td>
-                        </tr>
+                    container.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-file-earmark-text display-6 text-muted"></i>
+                            <p class="mt-2 text-muted">暂无${this.getStatusText(status)}申请</p>
+                        </div>
                     `;
                     return;
                 }
                 
-                tbody.innerHTML = applications.map(app => `
-                    <tr>
-                        <td><code>${app.application_id}</code></td>
-                        <td><strong>${app.username}</strong></td>
-                        <td>${app.email || '-'}</td>
-                        <td>${app.purpose}</td>
-                        <td>${new Date(app.created_at).toLocaleString()}</td>
-                        <td>
-                            ${app.status === 'pending' ? 
-                                '<span class="badge-status badge-pending">待处理</span>' :
-                            app.status === 'completed' ? 
-                                '<span class="badge-status badge-approved">已批准</span>' :
-                                '<span class="badge-status badge-rejected">已拒绝</span>'
-                            }
-                        </td>
-                        <td>
-                            ${app.status === 'pending' ? `
-                                <button class="btn btn-sm btn-success action-btn" 
-                                        onclick="AdminUI.reviewApplication('${app.application_id}', 'approve')"
-                                        title="批准">
-                                    <i class="bi bi-check-lg"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger action-btn" 
-                                        onclick="AdminUI.reviewApplication('${app.application_id}', 'reject')"
-                                        title="拒绝">
-                                    <i class="bi bi-x-lg"></i>
-                                </button>
-                            ` : ''}
-                            <button class="btn btn-sm btn-info action-btn" title="查看详情">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
+                const tableHtml = `
+                    <div class="table-responsive">
+                        <table class="table table-admin table-hover">
+                            <thead>
+                                <tr>
+                                    <th>申请ID</th>
+                                    <th>用户名</th>
+                                    <th>邮箱</th>
+                                    <th>用途</th>
+                                    <th>申请时间</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${applications.map(app => `
+                                    <tr>
+                                        <td><code>${app.application_id}</code></td>
+                                        <td><strong>${app.username}</strong></td>
+                                        <td>${app.email || '-'}</td>
+                                        <td>${app.purpose}</td>
+                                        <td>${new Date(app.created_at).toLocaleString()}</td>
+                                        <td>
+                                            ${app.status === 'pending' ? 
+                                                '<span class="badge-status badge-pending">待处理</span>' :
+                                            app.status === 'completed' ? 
+                                                '<span class="badge-status badge-approved">已批准</span>' :
+                                                '<span class="badge-status badge-rejected">已拒绝</span>'
+                                            }
+                                        </td>
+                                        <td>
+                                            ${app.status === 'pending' ? `
+                                                <button class="btn btn-sm btn-success action-btn" 
+                                                        onclick="AdminUI.reviewApplication('${app.application_id}', 'approve', '${app.username}')"
+                                                        title="批准">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-danger action-btn" 
+                                                        onclick="AdminUI.reviewApplication('${app.application_id}', 'reject', '${app.username}')"
+                                                        title="拒绝">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            ` : ''}
+                                            <button class="btn btn-sm btn-info action-btn" 
+                                                    onclick="AdminUI.viewApplicationDetails('${app.application_id}')"
+                                                    title="查看详情">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                container.innerHTML = tableHtml;
             },
             
+            // 获取状态文本
             getStatusText(status) {
                 const statusMap = {
                     'pending': '待处理',
@@ -1107,13 +1594,52 @@
                 return statusMap[status] || status;
             },
             
+            // 审核申请
+            async reviewApplication(applicationId, action, username) {
+                const actionText = action === 'approve' ? '批准' : '拒绝';
+                
+                if (!confirm(`确定要${actionText}用户 "${username}" 的申请吗？`)) {
+                    return;
+                }
+                
+                const reviewNotes = prompt(`请输入${actionText}备注（可选）：`) || '';
+                
+                try {
+                    this.showLoading(`正在${actionText}申请...`);
+                    
+                    const result = await AdminAPI.reviewApplication(applicationId, action, reviewNotes);
+                    
+                    if (result.success) {
+                        this.showAlert(`申请已${actionText}！`, 'success');
+                        // 刷新申请列表
+                        const activeBtn = document.querySelector('[data-status].active');
+                        if (activeBtn) {
+                            const status = activeBtn.dataset.status;
+                            await this.loadApplicationsData(status);
+                        }
+                    } else {
+                        this.showAlert(`${actionText}失败: ${result.error}`, 'danger');
+                    }
+                } catch (error) {
+                    this.showAlert(`${actionText}失败: ${error.message}`, 'danger');
+                } finally {
+                    this.hideLoading();
+                }
+            },
+            
+            // 查看申请详情
+            viewApplicationDetails(applicationId) {
+                this.showAlert('申请详情功能正在开发中', 'info');
+            },
+            
+            // 加载邀请码管理页面
             async loadInvitations() {
                 const contentDiv = document.getElementById('invitationsContent');
                 contentDiv.innerHTML = `
                     <div class="card card-admin">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">邀请码管理</h5>
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#generateInvitesModal">
+                            <button class="btn btn-primary" id="showGenerateModalBtn">
                                 <i class="bi bi-plus-lg me-1"></i> 生成邀请码
                             </button>
                         </div>
@@ -1123,7 +1649,7 @@
                                 邀请码用于用户注册，可以设置使用次数和有效期。
                             </div>
                             <div id="invitationsList" class="mt-3">
-                                <div class="text-center py-4">
+                                <div class="text-center py-5">
                                     <div class="spinner-border text-primary" role="status">
                                         <span class="visually-hidden">加载中...</span>
                                     </div>
@@ -1133,40 +1659,493 @@
                         </div>
                     </div>
                 `;
+                
+                // 绑定生成邀请码按钮
+                document.getElementById('showGenerateModalBtn').addEventListener('click', () => {
+                    const modal = new bootstrap.Modal(document.getElementById('generateInvitesModal'));
+                    modal.show();
+                });
+                
+                // 加载邀请码数据
+                await this.loadInvitationsData();
             },
             
-            async reviewApplication(applicationId, action) {
-                if (!confirm(`确定要${action === 'approve' ? '批准' : '拒绝'}此申请吗？`)) {
+            // 加载邀请码数据
+            async loadInvitationsData() {
+                const container = document.getElementById('invitationsList');
+                
+                try {
+                    const result = await AdminAPI.request(AppConfig.ENDPOINTS.invitationCodes);
+                    
+                    if (result.success && result.codes) {
+                        this.renderInvitationsList(result.codes);
+                    } else {
+                        container.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                加载邀请码数据失败
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    container.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            加载邀请码数据失败: ${error.message}
+                        </div>
+                    `;
+                }
+            },
+            
+            // 渲染邀请码列表
+            renderInvitationsList(codes) {
+                const container = document.getElementById('invitationsList');
+                
+                if (!codes || codes.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-ticket-perforated display-6 text-muted"></i>
+                            <p class="mt-2 text-muted">暂无邀请码数据</p>
+                        </div>
+                    `;
                     return;
                 }
                 
-                const notes = prompt('请输入审核备注（可选）：');
+                const invitationsHtml = `
+                    <div class="table-responsive">
+                        <table class="table table-admin table-hover">
+                            <thead>
+                                <tr>
+                                    <th>邀请码</th>
+                                    <th>创建者</th>
+                                    <th>用途</th>
+                                    <th>使用次数</th>
+                                    <th>状态</th>
+                                    <th>创建时间</th>
+                                    <th>有效期</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${codes.map(code => `
+                                    <tr>
+                                        <td><code class="fw-bold">${code.code}</code></td>
+                                        <td>${code.created_by}</td>
+                                        <td>${code.purpose || '未指定'}</td>
+                                        <td>${code.used_count || 0} / ${code.max_uses || 1}</td>
+                                        <td>
+                                            ${code.is_active ? 
+                                                '<span class="badge bg-success">有效</span>' : 
+                                                '<span class="badge bg-secondary">无效</span>'
+                                            }
+                                            ${code.expires_at && new Date(code.expires_at) < new Date() ? 
+                                                '<span class="badge bg-warning ms-1">已过期</span>' : ''
+                                            }
+                                        </td>
+                                        <td>${new Date(code.created_at).toLocaleDateString()}</td>
+                                        <td>${code.expires_at ? new Date(code.expires_at).toLocaleDateString() : '永久有效'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                container.innerHTML = invitationsHtml;
+            },
+            
+            // 加载操作日志页面
+            async loadLogs() {
+                const contentDiv = document.getElementById('logsContent');
+                contentDiv.innerHTML = `
+                    <div class="card card-admin">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">操作日志</h5>
+                            <button class="btn btn-sm btn-outline-danger" id="clearLogsBtn">
+                                <i class="bi bi-trash me-1"></i> 清理日志
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="logsTableContainer">
+                                <div class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <p class="mt-2">正在加载操作日志...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 加载日志数据
+                await this.loadLogsData();
+                
+                // 绑定清理日志按钮
+                document.getElementById('clearLogsBtn').addEventListener('click', async () => {
+                    if (confirm('确定要清理30天前的日志吗？此操作不可撤销！')) {
+                        try {
+                            this.showLoading('正在清理日志...');
+                            const result = await AdminAPI.request(
+                                AppConfig.ENDPOINTS.adminClearLogs,
+                                'DELETE',
+                                { days_to_keep: 30 }
+                            );
+                            
+                            if (result.success) {
+                                this.showAlert(result.message, 'success');
+                                await this.loadLogsData();
+                            } else {
+                                this.showAlert(`清理失败: ${result.error}`, 'danger');
+                            }
+                        } catch (error) {
+                            this.showAlert(`清理失败: ${error.message}`, 'danger');
+                        } finally {
+                            this.hideLoading();
+                        }
+                    }
+                });
+            },
+            
+            // 加载日志数据
+            async loadLogsData() {
+                const container = document.getElementById('logsTableContainer');
                 
                 try {
-                    AdminUI.showLoading();
-                    const result = await AdminAPI.reviewApplication(applicationId, action, notes);
+                    const result = await AdminAPI.getLogs();
                     
                     if (result.success) {
-                        alert(`申请已${action === 'approve' ? '批准' : '拒绝'}！`);
-                        // 刷新申请列表
-                        const activeTab = document.querySelector('[data-section="applications"]');
-                        if (activeTab.classList.contains('active')) {
-                            await this.loadApplicationsData('pending');
-                        }
+                        this.renderLogsTable(result.logs, result.pagination);
                     } else {
-                        alert('操作失败: ' + result.error);
+                        container.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                加载日志失败: ${result.error}
+                            </div>
+                        `;
                     }
                 } catch (error) {
-                    alert('操作失败: ' + error.message);
+                    container.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            加载日志失败: ${error.message}
+                        </div>
+                    `;
+                }
+            },
+            
+            // 渲染日志表格
+            renderLogsTable(logs, pagination) {
+                const container = document.getElementById('logsTableContainer');
+                
+                if (!logs || logs.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-journal-text display-6 text-muted"></i>
+                            <p class="mt-2 text-muted">暂无操作日志</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const tableHtml = `
+                    <div class="table-responsive">
+                        <table class="table table-admin table-hover">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>管理员</th>
+                                    <th>操作类型</th>
+                                    <th>描述</th>
+                                    <th>目标ID</th>
+                                    <th>IP地址</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${logs.map(log => `
+                                    <tr>
+                                        <td>${new Date(log.created_at).toLocaleString()}</td>
+                                        <td>${log.admin_name || '系统'}</td>
+                                        <td><span class="badge bg-info">${log.action_type}</span></td>
+                                        <td>${log.description}</td>
+                                        <td>${log.target_id || '-'}</td>
+                                        <td><code>${log.ip_address || '未知'}</code></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    ${pagination ? `
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="text-muted">
+                                第 ${pagination.page} 页，共 ${pagination.total_pages} 页，总计 ${pagination.total} 条记录
+                            </div>
+                            <nav>
+                                <ul class="pagination pagination-sm">
+                                    <li class="page-item ${pagination.page === 1 ? 'disabled' : ''}">
+                                        <a class="page-link" href="#" onclick="AdminUI.loadLogsPage(${pagination.page - 1})">上一页</a>
+                                    </li>
+                                    <li class="page-item ${pagination.page === pagination.total_pages ? 'disabled' : ''}">
+                                        <a class="page-link" href="#" onclick="AdminUI.loadLogsPage(${pagination.page + 1})">下一页</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    ` : ''}
+                `;
+                
+                container.innerHTML = tableHtml;
+            },
+            
+            // 加载日志分页
+            async loadLogsPage(page) {
+                const container = document.getElementById('logsTableContainer');
+                
+                try {
+                    this.showLoading('正在加载日志...');
+                    const result = await AdminAPI.getLogs(page);
+                    
+                    if (result.success) {
+                        this.renderLogsTable(result.logs, result.pagination);
+                    }
+                } catch (error) {
+                    this.showAlert('加载日志失败: ' + error.message, 'danger');
                 } finally {
-                    AdminUI.hideLoading();
+                    this.hideLoading();
+                }
+            },
+            
+            // 加载系统工具页面
+            async loadTools() {
+                const contentDiv = document.getElementById('toolsContent');
+                contentDiv.innerHTML = `
+                    <div class="card card-admin">
+                        <div class="card-header">
+                            <h5 class="mb-0">系统工具</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-4">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <i class="bi bi-database-check display-4 text-primary mb-3"></i>
+                                            <h5>数据库维护</h5>
+                                            <p class="text-muted">检查和修复数据库表结构</p>
+                                            <div class="d-grid gap-2">
+                                                <button class="btn btn-outline-primary" id="checkTablesBtn">
+                                                    <i class="bi bi-search me-2"></i>检查表结构
+                                                </button>
+                                                <button class="btn btn-outline-warning" id="repairTablesBtn">
+                                                    <i class="bi bi-tools me-2"></i>修复表结构
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6 mb-4">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <i class="bi bi-download display-4 text-success mb-3"></i>
+                                            <h5>数据导出</h5>
+                                            <p class="text-muted">导出系统数据为JSON或CSV格式</p>
+                                            <div class="d-grid gap-2">
+                                                <button class="btn btn-outline-success" onclick="AdminUI.exportData('users')">
+                                                    <i class="bi bi-people me-2"></i>导出用户数据
+                                                </button>
+                                                <button class="btn btn-outline-info" onclick="AdminUI.exportData('records')">
+                                                    <i class="bi bi-clipboard-data me-2"></i>导出记录数据
+                                                </button>
+                                                <button class="btn btn-outline-secondary" onclick="AdminUI.exportData('logs')">
+                                                    <i class="bi bi-journal-text me-2"></i>导出操作日志
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6 mb-4">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <i class="bi bi-gear display-4 text-info mb-3"></i>
+                                            <h5>系统配置</h5>
+                                            <p class="text-muted">管理系统配置和API设置</p>
+                                            <div class="d-grid gap-2">
+                                                <button class="btn btn-outline-info" id="apiConfigBtn">
+                                                    <i class="bi bi-plug me-2"></i>API服务器配置
+                                                </button>
+                                                <button class="btn btn-outline-secondary" id="clearCacheBtn">
+                                                    <i class="bi bi-trash me-2"></i>清理本地缓存
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6 mb-4">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <i class="bi bi-info-circle display-4 text-warning mb-3"></i>
+                                            <h5>系统信息</h5>
+                                            <p class="text-muted">查看系统状态和版本信息</p>
+                                            <div id="systemInfo">
+                                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                                    <span class="visually-hidden">加载中...</span>
+                                                </div>
+                                                <span class="ms-2">正在加载系统信息...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 加载系统信息
+                await this.loadSystemInfo();
+                
+                // 绑定工具按钮事件
+                document.getElementById('checkTablesBtn')?.addEventListener('click', async () => {
+                    try {
+                        this.showLoading('正在检查表结构...');
+                        const result = await AdminAPI.checkTables();
+                        
+                        if (result.success) {
+                            let info = '<h6>表结构检查结果:</h6><ul class="text-start">';
+                            Object.keys(result.tables).forEach(table => {
+                                const tableInfo = result.tables[table];
+                                info += `<li><strong>${table}:</strong> `;
+                                if (tableInfo.exists) {
+                                    info += `<span class="text-success">✓ 存在 (${tableInfo.columns.length} 列)</span>`;
+                                } else {
+                                    info += `<span class="text-danger">✗ 缺失</span>`;
+                                }
+                                info += '</li>';
+                            });
+                            info += '</ul>';
+                            
+                            this.showAlert(info, 'info', 10000);
+                        } else {
+                            this.showAlert(`检查失败: ${result.error}`, 'danger');
+                        }
+                    } catch (error) {
+                        this.showAlert(`检查失败: ${error.message}`, 'danger');
+                    } finally {
+                        this.hideLoading();
+                    }
+                });
+                
+                document.getElementById('repairTablesBtn')?.addEventListener('click', async () => {
+                    if (!confirm('确定要修复表结构吗？这可能会修改数据库结构。')) {
+                        return;
+                    }
+                    
+                    try {
+                        this.showLoading('正在修复表结构...');
+                        const result = await AdminAPI.repairTables();
+                        
+                        if (result.success) {
+                            this.showAlert(`修复完成: ${result.message} (修复了 ${result.repairedCount} 个缺失列)`, 'success');
+                        } else {
+                            this.showAlert(`修复失败: ${result.error}`, 'danger');
+                        }
+                    } catch (error) {
+                        this.showAlert(`修复失败: ${error.message}`, 'danger');
+                    } finally {
+                        this.hideLoading();
+                    }
+                });
+                
+                document.getElementById('apiConfigBtn')?.addEventListener('click', () => {
+                    const modal = new bootstrap.Modal(document.getElementById('apiConfigModal'));
+                    document.getElementById('configApiUrl').value = AppConfig.getApiUrl();
+                    document.getElementById('currentApiDisplay').textContent = AppConfig.getApiUrl();
+                    modal.show();
+                });
+                
+                document.getElementById('clearCacheBtn')?.addEventListener('click', () => {
+                    if (confirm('确定要清理所有本地缓存数据吗？这包括登录信息和API地址设置。')) {
+                        localStorage.clear();
+                        AdminState.clearAuth();
+                        this.showAlert('本地缓存已清理，请重新登录', 'info');
+                        this.showLoginPage();
+                    }
+                });
+            },
+            
+            // 加载系统信息
+            async loadSystemInfo() {
+                const container = document.getElementById('systemInfo');
+                if (!container) return;
+                
+                try {
+                    const testResult = await AdminAPI.testConnection();
+                    
+                    let infoHtml = `
+                        <div class="text-start">
+                            <p><strong>API状态:</strong> 
+                                ${testResult.success ? 
+                                    '<span class="text-success">✓ 正常连接</span>' : 
+                                    '<span class="text-danger">✗ 连接失败</span>'
+                                }
+                            </p>
+                            <p><strong>API地址:</strong> <code>${AppConfig.getApiUrl()}</code></p>
+                            <p><strong>管理员:</strong> ${AdminState.adminInfo?.username || '未登录'}</p>
+                            <p><strong>当前时间:</strong> ${new Date().toLocaleString()}</p>
+                        </div>
+                    `;
+                    
+                    container.innerHTML = infoHtml;
+                } catch (error) {
+                    container.innerHTML = `
+                        <div class="text-start">
+                            <p><strong>API状态:</strong> <span class="text-danger">✗ 连接失败</span></p>
+                            <p><strong>错误:</strong> ${error.message}</p>
+                        </div>
+                    `;
+                }
+            },
+            
+            // 导出数据
+            async exportData(type) {
+                try {
+                    this.showLoading('正在导出数据...');
+                    
+                    const result = await AdminAPI.exportData(type, 'json');
+                    
+                    if (result && result.success !== false) {
+                        // 创建一个下载链接
+                        const dataStr = JSON.stringify(result, null, 2);
+                        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                        const url = URL.createObjectURL(dataBlob);
+                        
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${type}_export_${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        
+                        this.showAlert(`${type}数据导出成功`, 'success');
+                    } else {
+                        this.showAlert(`导出失败: ${result?.error || '未知错误'}`, 'danger');
+                    }
+                } catch (error) {
+                    this.showAlert(`导出失败: ${error.message}`, 'danger');
+                } finally {
+                    this.hideLoading();
                 }
             }
         };
 
-        // ==================== 事件处理 ====================
-        document.addEventListener('DOMContentLoaded', function() {
-            // 初始化状态
+        // ==================== 事件监听器 ====================
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('管理面板初始化...');
+            console.log('当前API地址:', AppConfig.getApiUrl());
+            
+            // 初始化认证状态
             const isAuthenticated = AdminState.init();
             
             if (isAuthenticated) {
@@ -1175,36 +2154,106 @@
                 AdminUI.showLoginPage();
             }
             
+            // 测试API连接按钮
+            document.getElementById('testApiBtn')?.addEventListener('click', async function() {
+                const apiUrlInput = document.getElementById('apiUrl');
+                const connectionStatus = document.getElementById('connectionStatus');
+                
+                if (apiUrlInput && apiUrlInput.value.trim()) {
+                    // 保存测试的API地址
+                    const testUrl = apiUrlInput.value.trim();
+                    const originalUrl = AppConfig.getApiUrl();
+                    
+                    // 临时设置API地址
+                    localStorage.setItem('admin_api_url', testUrl);
+                    
+                    connectionStatus.classList.remove('d-none');
+                    connectionStatus.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            正在测试连接...
+                        </div>
+                    `;
+                    
+                    try {
+                        const testResult = await AdminAPI.testConnection();
+                        
+                        if (testResult.success) {
+                            connectionStatus.className = 'alert alert-success';
+                            connectionStatus.innerHTML = `
+                                <i class="bi bi-check-circle me-2"></i>
+                                连接成功: ${testResult.message}
+                            `;
+                        } else {
+                            connectionStatus.className = 'alert alert-danger';
+                            connectionStatus.innerHTML = `
+                                <i class="bi bi-x-circle me-2"></i>
+                                连接失败: ${testResult.message}
+                            `;
+                            // 恢复原始地址
+                            localStorage.setItem('admin_api_url', originalUrl);
+                        }
+                    } catch (error) {
+                        connectionStatus.className = 'alert alert-danger';
+                        connectionStatus.innerHTML = `
+                            <i class="bi bi-x-circle me-2"></i>
+                            连接失败: ${error.message}
+                        `;
+                        // 恢复原始地址
+                        localStorage.setItem('admin_api_url', originalUrl);
+                    }
+                    
+                    // 5秒后隐藏状态消息
+                    setTimeout(() => {
+                        connectionStatus.classList.add('d-none');
+                    }, 5000);
+                }
+            });
+            
             // 登录表单提交
-            document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            document.getElementById('loginForm')?.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
                 const username = document.getElementById('adminUsername').value.trim();
                 const password = document.getElementById('adminPassword').value;
-                
-                if (!username || !password) {
-                    AdminUI.showAlert('请输入用户名和密码');
-                    return;
-                }
-                
+                const apiUrl = document.getElementById('apiUrl')?.value.trim();
                 const loginBtn = document.querySelector('#loginForm button[type="submit"]');
                 const loginBtnText = document.getElementById('loginBtnText');
                 const loginLoading = document.getElementById('loginLoading');
+                
+                if (!username || !password) {
+                    AdminUI.showAlert('请输入用户名和密码', 'warning');
+                    return;
+                }
+                
+                // 保存API地址（如果提供了）
+                if (apiUrl) {
+                    AppConfig.setApiUrl(apiUrl);
+                }
                 
                 loginBtn.disabled = true;
                 loginBtnText.textContent = '登录中...';
                 loginLoading.classList.remove('d-none');
                 
                 try {
+                    // 先测试API连接
+                    const testResult = await AdminAPI.testConnection();
+                    if (!testResult.success) {
+                        AdminUI.showAlert(`API连接失败: ${testResult.message}`, 'danger');
+                        return;
+                    }
+                    
+                    // 执行登录
                     const result = await AdminAPI.login(username, password);
                     
                     if (result.success) {
+                        AdminUI.showAlert('登录成功', 'success');
                         AdminUI.showAdminDashboard();
                     } else {
-                        AdminUI.showAlert(result.error || '登录失败');
+                        AdminUI.showAlert(result.error || '登录失败', 'danger');
                     }
                 } catch (error) {
-                    AdminUI.showAlert('登录失败: ' + error.message);
+                    AdminUI.showAlert('登录失败: ' + error.message, 'danger');
                 } finally {
                     loginBtn.disabled = false;
                     loginBtnText.textContent = '登录';
@@ -1222,74 +2271,131 @@
             });
             
             // 退出登录
-            document.getElementById('logoutBtn').addEventListener('click', function(e) {
+            document.getElementById('logoutBtn')?.addEventListener('click', function(e) {
                 e.preventDefault();
                 if (confirm('确定要退出登录吗？')) {
                     AdminState.clearAuth();
+                    AdminUI.showAlert('已退出登录', 'info');
                     AdminUI.showLoginPage();
                 }
             });
             
             // 刷新统计
-            document.getElementById('refreshStats').addEventListener('click', function() {
+            document.getElementById('refreshStats')?.addEventListener('click', function() {
                 AdminUI.loadDashboard();
             });
             
+            // API状态按钮
+            document.getElementById('apiStatusBtn')?.addEventListener('click', async function() {
+                AdminUI.showLoading('正在检查API状态...');
+                try {
+                    const testResult = await AdminAPI.testConnection();
+                    if (testResult.success) {
+                        AdminUI.showAlert(`API状态: 正常 (${testResult.message})`, 'success');
+                    } else {
+                        AdminUI.showAlert(`API状态: 异常 (${testResult.message})`, 'danger');
+                    }
+                } catch (error) {
+                    AdminUI.showAlert(`API状态检查失败: ${error.message}`, 'danger');
+                } finally {
+                    AdminUI.hideLoading();
+                }
+            });
+            
             // 生成邀请码按钮
-            document.getElementById('generateInvitesBtn').addEventListener('click', function() {
-                const modal = new bootstrap.Modal(document.getElementById('generateInvitesModal'));
-                modal.show();
+            document.getElementById('generateInvitesBtn')?.addEventListener('click', function() {
+                AdminUI.showSection('invitations');
+                // 显示生成模态框
+                setTimeout(() => {
+                    const showBtn = document.getElementById('showGenerateModalBtn');
+                    if (showBtn) showBtn.click();
+                }, 100);
             });
             
             // 查看申请按钮
-            document.getElementById('viewAppsBtn').addEventListener('click', function() {
+            document.getElementById('viewAppsBtn')?.addEventListener('click', function() {
                 AdminUI.showSection('applications');
             });
             
-            // 系统日志按钮
-            document.getElementById('systemLogsBtn').addEventListener('click', function() {
-                AdminUI.showSection('logs');
+            // 导出数据按钮
+            document.getElementById('exportDataBtn')?.addEventListener('click', function() {
+                AdminUI.showSection('tools');
+            });
+            
+            // 系统工具按钮
+            document.getElementById('systemToolsBtn')?.addEventListener('click', function() {
+                AdminUI.showSection('tools');
             });
             
             // 确认生成邀请码
-            document.getElementById('confirmGenerateBtn').addEventListener('click', async function() {
+            document.getElementById('confirmGenerateBtn')?.addEventListener('click', async function() {
                 const count = parseInt(document.getElementById('inviteCount').value);
                 const purpose = document.getElementById('invitePurpose').value.trim();
                 const expiryDays = parseInt(document.getElementById('expiryDays').value);
                 const maxUses = parseInt(document.getElementById('maxUses').value);
                 
                 if (!purpose) {
-                    alert('请填写用途说明');
+                    AdminUI.showAlert('请填写用途说明', 'warning');
+                    return;
+                }
+                
+                if (isNaN(count) || count < 1 || count > 100) {
+                    AdminUI.showAlert('生成数量必须在1-100之间', 'warning');
                     return;
                 }
                 
                 const modal = bootstrap.Modal.getInstance(document.getElementById('generateInvitesModal'));
                 
                 try {
-                    AdminUI.showLoading();
+                    AdminUI.showLoading(`正在生成 ${count} 个邀请码...`);
                     
                     const result = await AdminAPI.generateInvitationCodes({
                         count,
+                        createdBy: AdminState.adminInfo?.username || 'admin',
                         purpose,
-                        expiryDays,
-                        maxUses,
-                        createdBy: AdminState.adminInfo.username
+                        format: 'json'
                     });
                     
                     if (result.success) {
-                        alert(`成功生成 ${result.count} 个邀请码！`);
+                        AdminUI.showAlert(`成功生成 ${result.count || result.codes?.length || 0} 个邀请码！`, 'success');
                         modal.hide();
                         
                         // 重置表单
                         document.getElementById('generateInvitesForm').reset();
+                        
+                        // 刷新邀请码列表
+                        if (document.getElementById('invitationsSection').style.display !== 'none') {
+                            await AdminUI.loadInvitationsData();
+                        }
                     } else {
-                        alert('生成失败: ' + result.error);
+                        AdminUI.showAlert('生成失败: ' + (result.error || '未知错误'), 'danger');
                     }
                 } catch (error) {
-                    alert('生成失败: ' + error.message);
+                    AdminUI.showAlert('生成失败: ' + error.message, 'danger');
                 } finally {
                     AdminUI.hideLoading();
                 }
+            });
+            
+            // 保存API配置
+            document.getElementById('saveApiConfigBtn')?.addEventListener('click', function() {
+                const apiUrl = document.getElementById('configApiUrl').value.trim();
+                
+                if (!apiUrl) {
+                    AdminUI.showAlert('请填写API服务器地址', 'warning');
+                    return;
+                }
+                
+                AppConfig.setApiUrl(apiUrl);
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('apiConfigModal'));
+                modal.hide();
+                
+                AdminUI.showAlert('API地址已更新，可能需要重新登录', 'info');
+                
+                // 更新显示
+                document.getElementById('currentApiUrl').textContent = 
+                    AppConfig.getApiUrl().replace(/^https?:\/\//, '');
             });
             
             // 初始化显示控制面板
