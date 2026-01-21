@@ -3226,7 +3226,7 @@ app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, 
 // ============ 水位影响统计API ============
 
 // 水位影响统计（专门用于前端统计分析页面）
-app.get('/api/admin/water-impact', authenticateAdmin, async (req, res) => {
+app.get('/api/admin/water-impact-stats', authenticateAdmin, async (req, res) => {
     try {
         console.log('🔍 获取水位影响统计数据...');
         
