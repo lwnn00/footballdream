@@ -175,7 +175,7 @@ const initDatabase = async () => {
       )
     `);
     
-    // 记录表
+    // 记录表 - 添加odds_change字段
     await pool.query(`
       CREATE TABLE IF NOT EXISTS records (
         id SERIAL PRIMARY KEY,
@@ -190,6 +190,7 @@ const initDatabase = async () => {
         water_change NUMERIC(4,2) NOT NULL,
         historical_record VARCHAR(10) NOT NULL,
         recommendation VARCHAR(50) NOT NULL,
+        odds_change VARCHAR(50), -- 新增：水位变化描述
         actual_result VARCHAR(10),
         analysis JSONB DEFAULT '{"probability":0,"confidence":0,"factors":[]}',
         is_synced BOOLEAN DEFAULT TRUE,
@@ -1269,6 +1270,7 @@ app.get('/api/history', authenticateToken, async (req, res) => {
                 water_change,
                 historical_record,
                 recommendation,
+                odds_change, -- 新增字段
                 actual_result,
                 created_at
              FROM records 
@@ -1292,6 +1294,7 @@ app.get('/api/history', authenticateToken, async (req, res) => {
             water_change: parseFloat(record.water_change) || 0,
             historical_record: record.historical_record || 'loss',
             recommendation: record.recommendation || '无推荐',
+            odds_change: record.odds_change || '', // 新增字段
             actual_result: record.actual_result || '',
             created_at: record.created_at
         }));
@@ -1316,7 +1319,7 @@ app.get('/api/history', authenticateToken, async (req, res) => {
     }
 });
 
-// 10. 保存记录
+// 10. 保存记录 - 已修改为包含odds_change字段
 app.post('/api/records', authenticateToken, async (req, res) => {
   try {
     const { userId } = req;
@@ -1343,12 +1346,24 @@ app.post('/api/records', authenticateToken, async (req, res) => {
       });
     }
     
+    // 计算水位变化
+    const waterChange = record.current_water - record.initial_water;
+    let oddsChange = '';
+    
+    if (waterChange > 0) {
+      oddsChange = `水位上升 ${waterChange.toFixed(2)}`;
+    } else if (waterChange < 0) {
+      oddsChange = `水位下降 ${Math.abs(waterChange).toFixed(2)}`;
+    } else {
+      oddsChange = '水位不变';
+    }
+    
     const result = await pool.query(
       `INSERT INTO records 
        (user_id, match_name, handicap_type, initial_handicap, current_handicap, 
         initial_water, current_water, handicap_change, water_change, 
-        historical_record, recommendation, actual_result) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
+        historical_record, recommendation, odds_change, actual_result) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
        RETURNING id, created_at`,
       [
         userId,
@@ -1362,6 +1377,7 @@ app.post('/api/records', authenticateToken, async (req, res) => {
         record.water_change,
         record.historical_record,
         record.recommendation,
+        oddsChange, // 新增字段
         record.actual_result || ''
       ]
     );
@@ -1377,6 +1393,7 @@ app.post('/api/records', authenticateToken, async (req, res) => {
       success: true,
       recordId: result.rows[0].id,
       created_at: result.rows[0].created_at,
+      odds_change: oddsChange, // 返回水位变化
       remainingTrial: user.user_type === 'trial' ? 
         Math.max(0, user.max_trial_count - user.trial_count - 1) : null,
       message: '记录保存成功'
@@ -1749,12 +1766,24 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
         );
         
         if (existing.rows.length === 0) {
+          // 计算水位变化
+          const waterChange = record.current_water - record.initial_water;
+          let oddsChange = '';
+          
+          if (waterChange > 0) {
+            oddsChange = `水位上升 ${waterChange.toFixed(2)}`;
+          } else if (waterChange < 0) {
+            oddsChange = `水位下降 ${Math.abs(waterChange).toFixed(2)}`;
+          } else {
+            oddsChange = '水位不变';
+          }
+          
           const result = await pool.query(
             `INSERT INTO records 
              (user_id, match_name, handicap_type, initial_handicap, current_handicap, 
               initial_water, current_water, handicap_change, water_change, 
-              historical_record, recommendation, actual_result, device_id, is_synced) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true) 
+              historical_record, recommendation, odds_change, actual_result, device_id, is_synced) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true) 
              RETURNING id`,
             [
               userId,
@@ -1768,6 +1797,7 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
               record.water_change,
               record.historical_record,
               record.recommendation,
+              oddsChange, // 新增字段
               record.actual_result || '',
               record.deviceId || 'local'
             ]
@@ -1775,12 +1805,24 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
           
           synced.push({ id: result.rows[0].id, deviceId: record.deviceId });
         } else {
+          // 更新现有记录
+          const waterChange = record.current_water - record.initial_water;
+          let oddsChange = '';
+          
+          if (waterChange > 0) {
+            oddsChange = `水位上升 ${waterChange.toFixed(2)}`;
+          } else if (waterChange < 0) {
+            oddsChange = `水位下降 ${Math.abs(waterChange).toFixed(2)}`;
+          } else {
+            oddsChange = '水位不变';
+          }
+          
           await pool.query(
             `UPDATE records SET 
               match_name = $1, handicap_type = $2, initial_handicap = $3, current_handicap = $4,
               initial_water = $5, current_water = $6, handicap_change = $7, water_change = $8,
-              historical_record = $9, recommendation = $10, actual_result = $11, is_synced = true
-             WHERE id = $12`,
+              historical_record = $9, recommendation = $10, odds_change = $11, actual_result = $12, is_synced = true
+             WHERE id = $13`,
             [
               record.match_name,
               record.handicap_type,
@@ -1792,6 +1834,7 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
               record.water_change,
               record.historical_record,
               record.recommendation,
+              oddsChange, // 新增字段
               record.actual_result || '',
               existing.rows[0].id
             ]
@@ -3220,6 +3263,145 @@ app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, 
         res.status(500).json({
             success: false,
             error: '批量操作失败'
+        });
+    }
+});
+
+// 41. 水位变化对结果的影响分析
+app.get('/api/admin/analysis/water-change', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                -- 水位变化对赢率的影响
+                SUM(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN actual_result = 'loss' THEN 1 ELSE 0 END) as losses,
+                SUM(CASE WHEN actual_result IS NULL THEN 1 ELSE 0 END) as pending,
+                COUNT(*) as total,
+                
+                -- 水位上升情况下的表现
+                SUM(CASE WHEN water_change > 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as water_up_wins,
+                SUM(CASE WHEN water_change > 0 AND actual_result = 'loss' THEN 1 ELSE 0 END) as water_up_losses,
+                SUM(CASE WHEN water_change > 0 THEN 1 ELSE 0 END) as water_up_total,
+                
+                -- 水位下降情况下的表现
+                SUM(CASE WHEN water_change < 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as water_down_wins,
+                SUM(CASE WHEN water_change < 0 AND actual_result = 'loss' THEN 1 ELSE 0 END) as water_down_losses,
+                SUM(CASE WHEN water_change < 0 THEN 1 ELSE 0 END) as water_down_total,
+                
+                -- 水位不变情况下的表现
+                SUM(CASE WHEN water_change = 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as water_same_wins,
+                SUM(CASE WHEN water_change = 0 AND actual_result = 'loss' THEN 1 ELSE 0 END) as water_same_losses,
+                SUM(CASE WHEN water_change = 0 THEN 1 ELSE 0 END) as water_same_total,
+                
+                -- 水位变化幅度分析
+                AVG(CASE WHEN actual_result = 'win' THEN ABS(water_change) ELSE 0 END) as avg_win_water_change,
+                AVG(CASE WHEN actual_result = 'loss' THEN ABS(water_change) ELSE 0 END) as avg_loss_water_change,
+                
+                -- 不同水位变化区间的胜率
+                SUM(CASE WHEN water_change > 0.05 AND actual_result = 'win' THEN 1 ELSE 0 END) as big_up_wins,
+                SUM(CASE WHEN water_change > 0.05 THEN 1 ELSE 0 END) as big_up_total,
+                SUM(CASE WHEN water_change < -0.05 AND actual_result = 'win' THEN 1 ELSE 0 END) as big_down_wins,
+                SUM(CASE WHEN water_change < -0.05 THEN 1 ELSE 0 END) as big_down_total
+            FROM records
+            WHERE actual_result IS NOT NULL
+        `);
+        
+        const data = result.rows[0];
+        
+        // 计算胜率
+        const overallWinRate = data.total > 0 ? (data.wins / data.total * 100).toFixed(2) : 0;
+        
+        // 水位上升胜率
+        const waterUpWinRate = data.water_up_total > 0 ? 
+            (data.water_up_wins / data.water_up_total * 100).toFixed(2) : 0;
+        
+        // 水位下降胜率
+        const waterDownWinRate = data.water_down_total > 0 ? 
+            (data.water_down_wins / data.water_down_total * 100).toFixed(2) : 0;
+        
+        // 水位不变胜率
+        const waterSameWinRate = data.water_same_total > 0 ? 
+            (data.water_same_wins / data.water_same_total * 100).toFixed(2) : 0;
+        
+        // 大幅变化胜率
+        const bigUpWinRate = data.big_up_total > 0 ? 
+            (data.big_up_wins / data.big_up_total * 100).toFixed(2) : 0;
+        
+        const bigDownWinRate = data.big_down_total > 0 ? 
+            (data.big_down_wins / data.big_down_total * 100).toFixed(2) : 0;
+        
+        res.json({
+            success: true,
+            analysis: {
+                // 总体统计
+                total: data.total,
+                wins: data.wins,
+                losses: data.losses,
+                pending: data.pending,
+                overall_win_rate: parseFloat(overallWinRate),
+                
+                // 水位变化分布
+                water_up: {
+                    total: data.water_up_total,
+                    wins: data.water_up_wins,
+                    losses: data.water_up_losses,
+                    win_rate: parseFloat(waterUpWinRate)
+                },
+                water_down: {
+                    total: data.water_down_total,
+                    wins: data.water_down_wins,
+                    losses: data.water_down_losses,
+                    win_rate: parseFloat(waterDownWinRate)
+                },
+                water_same: {
+                    total: data.water_same_total,
+                    wins: data.water_same_wins,
+                    losses: data.water_same_losses,
+                    win_rate: parseFloat(waterSameWinRate)
+                },
+                
+                // 变化幅度分析
+                avg_win_water_change: parseFloat(data.avg_win_water_change || 0).toFixed(3),
+                avg_loss_water_change: parseFloat(data.avg_loss_water_change || 0).toFixed(3),
+                
+                // 大幅变化分析
+                big_up: {
+                    total: data.big_up_total,
+                    wins: data.big_up_wins,
+                    win_rate: parseFloat(bigUpWinRate)
+                },
+                big_down: {
+                    total: data.big_down_total,
+                    wins: data.big_down_wins,
+                    win_rate: parseFloat(bigDownWinRate)
+                },
+                
+                // 建议
+                recommendations: [
+                    {
+                        condition: "水位上升时",
+                        suggestion: waterUpWinRate > 55 ? "可以考虑跟投" : "需要谨慎分析",
+                        confidence: Math.min(parseFloat(waterUpWinRate) / 100, 1)
+                    },
+                    {
+                        condition: "水位下降时", 
+                        suggestion: waterDownWinRate > 55 ? "可能是好的投注机会" : "可能需要避免",
+                        confidence: Math.min(parseFloat(waterDownWinRate) / 100, 1)
+                    },
+                    {
+                        condition: "水位大幅变动时",
+                        suggestion: "注意机构调整意图，结合其他因素分析",
+                        confidence: 0.8
+                    }
+                ]
+            }
+        });
+        
+    } catch (error) {
+        console.error('水位变化分析错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '水位变化分析失败'
         });
     }
 });
