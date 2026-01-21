@@ -190,7 +190,6 @@ const initDatabase = async () => {
         water_change NUMERIC(4,2) NOT NULL,
         historical_record VARCHAR(10) NOT NULL,
         recommendation VARCHAR(50) NOT NULL,
-        odds_change VARCHAR(10), -- 新增：水位变化显示字段
         actual_result VARCHAR(10),
         analysis JSONB DEFAULT '{"probability":0,"confidence":0,"factors":[]}',
         is_synced BOOLEAN DEFAULT TRUE,
@@ -279,8 +278,6 @@ const initDatabase = async () => {
       CREATE INDEX IF NOT EXISTS idx_users_user_type ON users(user_type);
       CREATE INDEX IF NOT EXISTS idx_records_user_id ON records(user_id);
       CREATE INDEX IF NOT EXISTS idx_records_created_at ON records(created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_records_water_change ON records(water_change);
-      CREATE INDEX IF NOT EXISTS idx_records_actual_result ON records(actual_result);
       CREATE INDEX IF NOT EXISTS idx_invitation_codes_code ON invitation_codes(code);
       CREATE INDEX IF NOT EXISTS idx_invitation_codes_is_active ON invitation_codes(is_active);
       CREATE INDEX IF NOT EXISTS idx_invitation_applications_status ON invitation_applications(status);
@@ -1272,7 +1269,6 @@ app.get('/api/history', authenticateToken, async (req, res) => {
                 water_change,
                 historical_record,
                 recommendation,
-                odds_change,
                 actual_result,
                 created_at
              FROM records 
@@ -1296,7 +1292,6 @@ app.get('/api/history', authenticateToken, async (req, res) => {
             water_change: parseFloat(record.water_change) || 0,
             historical_record: record.historical_record || 'loss',
             recommendation: record.recommendation || '无推荐',
-            odds_change: record.odds_change || this.formatOddsChange(record.water_change),
             actual_result: record.actual_result || '',
             created_at: record.created_at
         }));
@@ -1320,17 +1315,6 @@ app.get('/api/history', authenticateToken, async (req, res) => {
         });
     }
 });
-
-// 辅助函数：格式化水位变化显示
-function formatOddsChange(waterChange) {
-    if (waterChange > 0) {
-        return `+${waterChange.toFixed(2)}`;
-    } else if (waterChange < 0) {
-        return `${waterChange.toFixed(2)}`;
-    } else {
-        return `0.00`;
-    }
-}
 
 // 10. 保存记录
 app.post('/api/records', authenticateToken, async (req, res) => {
@@ -1359,16 +1343,12 @@ app.post('/api/records', authenticateToken, async (req, res) => {
       });
     }
     
-    // 计算水位变化显示
-    const waterChange = parseFloat(record.water_change) || 0;
-    const oddsChangeDisplay = formatOddsChange(waterChange);
-    
     const result = await pool.query(
       `INSERT INTO records 
        (user_id, match_name, handicap_type, initial_handicap, current_handicap, 
         initial_water, current_water, handicap_change, water_change, 
-        historical_record, recommendation, odds_change, actual_result) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+        historical_record, recommendation, actual_result) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
        RETURNING id, created_at`,
       [
         userId,
@@ -1379,10 +1359,9 @@ app.post('/api/records', authenticateToken, async (req, res) => {
         record.initial_water,
         record.current_water,
         record.handicap_change,
-        waterChange,
+        record.water_change,
         record.historical_record,
         record.recommendation,
-        oddsChangeDisplay,
         record.actual_result || ''
       ]
     );
@@ -1400,7 +1379,6 @@ app.post('/api/records', authenticateToken, async (req, res) => {
       created_at: result.rows[0].created_at,
       remainingTrial: user.user_type === 'trial' ? 
         Math.max(0, user.max_trial_count - user.trial_count - 1) : null,
-      odds_change: oddsChangeDisplay,
       message: '记录保存成功'
     });
     
@@ -1613,7 +1591,7 @@ app.post('/api/recommend/size', async (req, res) => {
   }
 });
 
-// 15. 获取统计信息（简化版，只保留水位变化对结果的影响）
+// 15. 获取统计信息
 app.get('/api/stats', authenticateToken, async (req, res) => {
   try {
     const { userId } = req;
@@ -1632,51 +1610,31 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
       [userId]
     );
     
-    // 水位变化对结果的影响统计
-    const waterChangeStats = await pool.query(
+    const typeResult = await pool.query(
       `SELECT 
-        CASE 
-          WHEN water_change > 0 THEN 'water_up'
-          WHEN water_change < 0 THEN 'water_down'
-          ELSE 'water_no_change'
-        END as water_change_type,
+        handicap_type,
         COUNT(*) as total,
-        SUM(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as wins,
-        SUM(CASE WHEN actual_result = 'loss' THEN 1 ELSE 0 END) as losses
+        SUM(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as wins
        FROM records 
        WHERE user_id = $1 AND actual_result IS NOT NULL
-       GROUP BY 
-        CASE 
-          WHEN water_change > 0 THEN 'water_up'
-          WHEN water_change < 0 THEN 'water_down'
-          ELSE 'water_no_change'
-        END`,
+       GROUP BY handicap_type`,
       [userId]
     );
     
-    // 水位大小对结果的影响
-    const waterLevelStats = await pool.query(
+    const changeResult = await pool.query(
       `SELECT 
-        CASE 
-          WHEN current_water < 0.85 THEN 'ultra_low'
-          WHEN current_water < 0.90 THEN 'low'
-          WHEN current_water < 0.95 THEN 'medium'
-          WHEN current_water < 1.00 THEN 'high'
-          ELSE 'ultra_high'
-        END as water_level,
-        COUNT(*) as total,
-        SUM(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as wins,
-        SUM(CASE WHEN actual_result = 'loss' THEN 1 ELSE 0 END) as losses
+        SUM(CASE WHEN water_change > 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as water_up_wins,
+        SUM(CASE WHEN water_change > 0 THEN 1 ELSE 0 END) as water_up_total,
+        SUM(CASE WHEN water_change < 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as water_down_wins,
+        SUM(CASE WHEN water_change < 0 THEN 1 ELSE 0 END) as water_down_total,
+        SUM(CASE WHEN handicap_change > 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as handicap_up_wins,
+        SUM(CASE WHEN handicap_change > 0 THEN 1 ELSE 0 END) as handicap_up_total,
+        SUM(CASE WHEN handicap_change < 0 AND actual_result = 'win' THEN 1 ELSE 0 END) as handicap_down_wins,
+        SUM(CASE WHEN handicap_change < 0 THEN 1 ELSE 0 END) as handicap_down_total,
+        SUM(CASE WHEN current_water < 0.90 AND actual_result = 'win' THEN 1 ELSE 0 END) as low_water_wins,
+        SUM(CASE WHEN current_water < 0.90 THEN 1 ELSE 0 END) as low_water_total
        FROM records 
-       WHERE user_id = $1 AND actual_result IS NOT NULL
-       GROUP BY 
-        CASE 
-          WHEN current_water < 0.85 THEN 'ultra_low'
-          WHEN current_water < 0.90 THEN 'low'
-          WHEN current_water < 0.95 THEN 'medium'
-          WHEN current_water < 1.00 THEN 'high'
-          ELSE 'ultra_high'
-        END`,
+       WHERE user_id = $1 AND actual_result IS NOT NULL`,
       [userId]
     );
     
@@ -1684,43 +1642,31 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
     const winRate = winRateResult.rows[0].total > 0 ? 
       Math.round((winRateResult.rows[0].wins / winRateResult.rows[0].total) * 100) : 0;
     
-    // 处理水位变化统计数据
-    const waterChangeData = {};
-    waterChangeStats.rows.forEach(row => {
-      const winRate = row.total > 0 ? Math.round((row.wins / row.total) * 100) : 0;
-      const lossRate = row.total > 0 ? Math.round((row.losses / row.total) * 100) : 0;
-      
-      waterChangeData[row.water_change_type] = {
-        total: parseInt(row.total),
-        wins: parseInt(row.wins),
-        losses: parseInt(row.losses),
-        win_rate: winRate,
-        loss_rate: lossRate
-      };
+    const typeStats = {};
+    typeResult.rows.forEach(row => {
+      typeStats[row.handicap_type] = row.total > 0 ? 
+        Math.round((row.wins / row.total) * 100) : 0;
     });
     
-    // 处理水位大小统计数据
-    const waterLevelData = {};
-    waterLevelStats.rows.forEach(row => {
-      const winRate = row.total > 0 ? Math.round((row.wins / row.total) * 100) : 0;
-      const lossRate = row.total > 0 ? Math.round((row.losses / row.total) * 100) : 0;
-      
-      waterLevelData[row.water_level] = {
-        total: parseInt(row.total),
-        wins: parseInt(row.wins),
-        losses: parseInt(row.losses),
-        win_rate: winRate,
-        loss_rate: lossRate
-      };
-    });
+    const changeData = changeResult.rows[0];
     
     res.json({
       success: true,
       stats: {
         totalRecords: total,
         winRate: winRate,
-        water_change_impact: waterChangeData,
-        water_level_impact: waterLevelData
+        asianWinRate: typeStats.asian || 0,
+        sizeWinRate: typeStats.size || 0,
+        waterUpWinRate: changeData.water_up_total > 0 ? 
+          Math.round((changeData.water_up_wins / changeData.water_up_total) * 100) : 0,
+        waterDownWinRate: changeData.water_down_total > 0 ? 
+          Math.round((changeData.water_down_wins / changeData.water_down_total) * 100) : 0,
+        handicapUpWinRate: changeData.handicap_up_total > 0 ? 
+          Math.round((changeData.handicap_up_wins / changeData.handicap_up_total) * 100) : 0,
+        handicapDownWinRate: changeData.handicap_down_total > 0 ? 
+          Math.round((changeData.handicap_down_wins / changeData.handicap_down_total) * 100) : 0,
+        lowWaterWinRate: changeData.low_water_total > 0 ? 
+          Math.round((changeData.low_water_wins / changeData.low_water_total) * 100) : 0
       }
     });
     
@@ -1802,17 +1748,13 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
           [userId, record.deviceId]
         );
         
-        // 计算水位变化显示
-        const waterChange = parseFloat(record.water_change) || 0;
-        const oddsChangeDisplay = formatOddsChange(waterChange);
-        
         if (existing.rows.length === 0) {
           const result = await pool.query(
             `INSERT INTO records 
              (user_id, match_name, handicap_type, initial_handicap, current_handicap, 
               initial_water, current_water, handicap_change, water_change, 
-              historical_record, recommendation, odds_change, actual_result, device_id, is_synced) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true) 
+              historical_record, recommendation, actual_result, device_id, is_synced) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true) 
              RETURNING id`,
             [
               userId,
@@ -1823,10 +1765,9 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
               record.initial_water,
               record.current_water,
               record.handicap_change,
-              waterChange,
+              record.water_change,
               record.historical_record,
               record.recommendation,
-              oddsChangeDisplay,
               record.actual_result || '',
               record.deviceId || 'local'
             ]
@@ -1838,8 +1779,8 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
             `UPDATE records SET 
               match_name = $1, handicap_type = $2, initial_handicap = $3, current_handicap = $4,
               initial_water = $5, current_water = $6, handicap_change = $7, water_change = $8,
-              historical_record = $9, recommendation = $10, odds_change = $11, actual_result = $12, is_synced = true
-             WHERE id = $13`,
+              historical_record = $9, recommendation = $10, actual_result = $11, is_synced = true
+             WHERE id = $12`,
             [
               record.match_name,
               record.handicap_type,
@@ -1848,10 +1789,9 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
               record.initial_water,
               record.current_water,
               record.handicap_change,
-              waterChange,
+              record.water_change,
               record.historical_record,
               record.recommendation,
-              oddsChangeDisplay,
               record.actual_result || '',
               existing.rows[0].id
             ]
@@ -2014,7 +1954,65 @@ app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
     }
 });
 
-// 20. 管理员获取所有记录
+// 20. 管理员获取所有邀请码
+app.get('/api/admin/invitations', authenticateAdmin, async (req, res) => {
+    try {
+        const { page = 1, limit = 20, status = 'all' } = req.query;
+        const offset = (page - 1) * limit;
+        
+        let query = `
+            SELECT id, code, created_by, created_for, purpose, max_uses, used_count,
+                   is_active, expires_at, used_by, notes, created_at, updated_at
+            FROM invitation_codes
+        `;
+        
+        let countQuery = `SELECT COUNT(*) as total FROM invitation_codes`;
+        const params = [];
+        const countParams = [];
+        
+        if (status === 'active') {
+            query += ` WHERE is_active = true AND (expires_at IS NULL OR expires_at > NOW())`;
+            countQuery += ` WHERE is_active = true AND (expires_at IS NULL OR expires_at > NOW())`;
+        } else if (status === 'inactive') {
+            query += ` WHERE is_active = false`;
+            countQuery += ` WHERE is_active = false`;
+        } else if (status === 'expired') {
+            query += ` WHERE expires_at < NOW()`;
+            countQuery += ` WHERE expires_at < NOW()`;
+        }
+        
+        query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        params.push(parseInt(limit), offset);
+        
+        const result = await pool.query(query, params);
+        const countResult = await pool.query(countQuery, countParams);
+        
+        const total = parseInt(countResult.rows[0].total);
+        const totalPages = Math.ceil(total / limit);
+        
+        res.json({
+            success: true,
+            invitations: result.rows,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total: total,
+                totalPages: totalPages,
+                hasNext: page < totalPages,
+                hasPrev: page > 1
+            }
+        });
+        
+    } catch (error) {
+        console.error('获取邀请码列表错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '获取邀请码列表失败'
+        });
+    }
+});
+
+// 21. 管理员获取所有记录
 app.get('/api/admin/records', authenticateAdmin, async (req, res) => {
     try {
         const { page = 1, limit = 20, userId, startDate, endDate } = req.query;
@@ -2092,293 +2090,6 @@ app.get('/api/admin/records', authenticateAdmin, async (req, res) => {
     }
 });
 
-// ============ 管理员API - 水位影响统计 ============
-
-// 21. 管理员获取水位影响统计
-app.get('/api/admin/water-impact-stats', authenticateAdmin, async (req, res) => {
-    try {
-        console.log('获取水位影响统计...');
-        
-        // 总记录数
-        const totalRecords = await pool.query('SELECT COUNT(*) as count FROM records');
-        
-        // 胜负统计
-        const resultStats = await pool.query(`
-            SELECT 
-                actual_result,
-                COUNT(*) as count
-            FROM records
-            WHERE actual_result IS NOT NULL AND actual_result != ''
-            GROUP BY actual_result
-        `);
-        
-        // 水位变化对结果的影响
-        const waterChangeImpact = await pool.query(`
-            SELECT 
-                CASE 
-                    WHEN water_change > 0.05 THEN 'significant_up'
-                    WHEN water_change > 0 THEN 'up'
-                    WHEN water_change < -0.05 THEN 'significant_down'
-                    WHEN water_change < 0 THEN 'down'
-                    ELSE 'stable'
-                END as water_change_category,
-                actual_result,
-                COUNT(*) as count
-            FROM records
-            WHERE actual_result IS NOT NULL AND actual_result != ''
-            GROUP BY 
-                CASE 
-                    WHEN water_change > 0.05 THEN 'significant_up'
-                    WHEN water_change > 0 THEN 'up'
-                    WHEN water_change < -0.05 THEN 'significant_down'
-                    WHEN water_change < 0 THEN 'down'
-                    ELSE 'stable'
-                END,
-                actual_result
-            ORDER BY water_change_category, actual_result
-        `);
-        
-        // 水位大小分布
-        const waterLevelDistribution = await pool.query(`
-            SELECT 
-                CASE 
-                    WHEN current_water < 0.80 THEN 'ultra_low'
-                    WHEN current_water < 0.85 THEN 'very_low'
-                    WHEN current_water < 0.90 THEN 'low'
-                    WHEN current_water < 0.95 THEN 'medium'
-                    WHEN current_water < 1.00 THEN 'high'
-                    ELSE 'ultra_high'
-                END as water_level,
-                COUNT(*) as count,
-                AVG(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as win_rate
-            FROM records
-            WHERE actual_result IS NOT NULL AND actual_result != ''
-            GROUP BY 
-                CASE 
-                    WHEN current_water < 0.80 THEN 'ultra_low'
-                    WHEN current_water < 0.85 THEN 'very_low'
-                    WHEN current_water < 0.90 THEN 'low'
-                    WHEN current_water < 0.95 THEN 'medium'
-                    WHEN current_water < 1.00 THEN 'high'
-                    ELSE 'ultra_high'
-                END
-            ORDER BY water_level
-        `);
-        
-        // 水位变化趋势
-        const waterChangeTrend = await pool.query(`
-            SELECT 
-                DATE_TRUNC('day', created_at) as day,
-                AVG(water_change) as avg_water_change,
-                COUNT(*) as record_count
-            FROM records
-            WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-            GROUP BY DATE_TRUNC('day', created_at)
-            ORDER BY day
-        `);
-        
-        // 处理统计数据
-        const resultData = {};
-        resultStats.rows.forEach(row => {
-            resultData[row.actual_result] = parseInt(row.count);
-        });
-        
-        const waterChangeData = {};
-        waterChangeImpact.rows.forEach(row => {
-            if (!waterChangeData[row.water_change_category]) {
-                waterChangeData[row.water_change_category] = {};
-            }
-            waterChangeData[row.water_change_category][row.actual_result] = parseInt(row.count);
-        });
-        
-        const waterLevelData = waterLevelDistribution.rows.map(row => ({
-            level: row.water_level,
-            count: parseInt(row.count),
-            win_rate: row.win_rate ? Math.round(row.win_rate * 100) : 0
-        }));
-        
-        const waterTrendData = waterChangeTrend.rows.map(row => ({
-            day: row.day,
-            avg_water_change: parseFloat(row.avg_water_change) || 0,
-            record_count: parseInt(row.record_count)
-        }));
-        
-        // 计算胜率
-        const totalWins = resultData['win'] || 0;
-        const totalLosses = resultData['loss'] || 0;
-        const totalResults = totalWins + totalLosses;
-        const overallWinRate = totalResults > 0 ? Math.round((totalWins / totalResults) * 100) : 0;
-        
-        // 计算平均水位
-        const avgWaterResult = await pool.query('SELECT AVG(current_water) as avg_water FROM records');
-        const averageWater = avgWaterResult.rows[0].avg_water ? 
-            parseFloat(avgWaterResult.rows[0].avg_water) : 0;
-        
-        // 计算平均水位变化
-        const avgWaterChangeResult = await pool.query('SELECT AVG(water_change) as avg_change FROM records');
-        const averageWaterChange = avgWaterChangeResult.rows[0].avg_change ? 
-            parseFloat(avgWaterChangeResult.rows[0].avg_change) : 0;
-        
-        // 水位变化胜率统计
-        const waterChangeWinRates = {};
-        for (const category in waterChangeData) {
-            const categoryData = waterChangeData[category];
-            const wins = categoryData['win'] || 0;
-            const losses = categoryData['loss'] || 0;
-            const total = wins + losses;
-            waterChangeWinRates[category] = {
-                wins: wins,
-                losses: losses,
-                total: total,
-                win_rate: total > 0 ? Math.round((wins / total) * 100) : 0
-            };
-        }
-        
-        res.json({
-            success: true,
-            stats: {
-                total_records: parseInt(totalRecords.rows[0].count),
-                win_count: totalWins,
-                loss_count: totalLosses,
-                pending_count: resultData[''] || 0,
-                win_rate: overallWinRate,
-                average_water: averageWater,
-                average_water_change: averageWaterChange,
-                
-                // 水位变化影响统计
-                water_change_impact: waterChangeData,
-                
-                // 水位变化胜率
-                water_change_win_rates: waterChangeWinRates,
-                
-                // 水位大小分布
-                water_level_distribution: waterLevelData,
-                
-                // 水位趋势
-                water_change_trend: waterTrendData,
-                
-                // 最频繁的水位变化类型
-                most_common_water_change: waterLevelData.length > 0 ? 
-                    waterLevelData.reduce((prev, current) => 
-                        (prev.count > current.count) ? prev : current
-                    ).level : 'medium',
-                
-                // 最高胜率的水位变化类型
-                best_water_change_type: Object.keys(waterChangeWinRates).length > 0 ? 
-                    Object.keys(waterChangeWinRates).reduce((prev, current) => 
-                        (waterChangeWinRates[prev].win_rate > waterChangeWinRates[current].win_rate) ? prev : current
-                    ) : 'stable'
-            }
-        });
-        
-    } catch (error) {
-        console.error('获取水位影响统计错误:', error);
-        
-        // 如果出错，返回模拟数据
-        res.json({
-            success: true,
-            stats: {
-                total_records: 1250,
-                win_count: 680,
-                loss_count: 420,
-                pending_count: 150,
-                win_rate: 54.4,
-                average_water: 0.92,
-                average_water_change: 0.02,
-                
-                water_change_impact: {
-                    significant_up: { win: 120, loss: 80 },
-                    up: { win: 180, loss: 110 },
-                    stable: { win: 200, loss: 120 },
-                    down: { win: 120, loss: 80 },
-                    significant_down: { win: 60, loss: 30 }
-                },
-                
-                water_change_win_rates: {
-                    significant_up: { wins: 120, losses: 80, total: 200, win_rate: 60 },
-                    up: { wins: 180, losses: 110, total: 290, win_rate: 62 },
-                    stable: { wins: 200, losses: 120, total: 320, win_rate: 63 },
-                    down: { wins: 120, losses: 80, total: 200, win_rate: 60 },
-                    significant_down: { wins: 60, losses: 30, total: 90, win_rate: 67 }
-                },
-                
-                water_level_distribution: [
-                    { level: 'ultra_low', count: 150, win_rate: 45 },
-                    { level: 'very_low', count: 200, win_rate: 52 },
-                    { level: 'low', count: 320, win_rate: 58 },
-                    { level: 'medium', count: 450, win_rate: 62 },
-                    { level: 'high', count: 280, win_rate: 55 },
-                    { level: 'ultra_high', count: 50, win_rate: 40 }
-                ],
-                
-                water_change_trend: Array.from({ length: 30 }, (_, i) => ({
-                    day: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    avg_water_change: (Math.random() * 0.1 - 0.05).toFixed(3),
-                    record_count: Math.floor(Math.random() * 20) + 10
-                })),
-                
-                most_common_water_change: 'medium',
-                best_water_change_type: 'significant_down'
-            }
-        });
-    }
-});
-// 22. 管理员获取记录统计（兼容旧版本）
-app.get('/api/admin/records/stats', authenticateAdmin, async (req, res) => {
-    try {
-        // 重定向到新的水位影响统计端点
-        const statsResult = await pool.query('SELECT COUNT(*) as total_records FROM records');
-        
-        res.json({
-            success: true,
-            stats: {
-                total_records: parseInt(statsResult.rows[0].total_records),
-                win_count: 0,
-                loss_count: 0,
-                pending_count: 0,
-                handicap_types: {
-                    asian: 0,
-                    over_under: 0
-                },
-                odds_distribution: {
-                    ultra_low: 0,
-                    low: 0,
-                    medium: 0,
-                    high: 0,
-                    ultra_high: 0
-                },
-                win_rate: 0,
-                average_odds: 0,
-                most_common_handicap: 'asian'
-            }
-        });
-    } catch (error) {
-        console.error('获取记录统计错误:', error);
-        res.json({
-            success: true,
-            stats: {
-                total_records: 1250,
-                win_count: 680,
-                loss_count: 420,
-                pending_count: 150,
-                handicap_types: {
-                    asian: 780,
-                    over_under: 470
-                },
-                odds_distribution: {
-                    ultra_low: 150,
-                    low: 320,
-                    medium: 450,
-                    high: 280,
-                    ultra_high: 50
-                },
-                win_rate: 54.4,
-                average_odds: 0.92,
-                most_common_handicap: 'asian'
-            }
-        });
-    }
-});
 // 22. 管理员获取操作日志
 app.get('/api/admin/logs', authenticateAdmin, async (req, res) => {
     try {
@@ -2597,6 +2308,7 @@ const adminRoutes = [
 adminRoutes.forEach(route => {
     app.use(route, logAdminAction);
 });
+
 // 25. 系统设置API
 app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
     try {
@@ -3508,64 +3220,6 @@ app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, 
         res.status(500).json({
             success: false,
             error: '批量操作失败'
-        });
-    }
-});
-
-// 41. 管理员获取所有邀请码
-app.get('/api/admin/invitations', authenticateAdmin, async (req, res) => {
-    try {
-        const { page = 1, limit = 20, status = 'all' } = req.query;
-        const offset = (page - 1) * limit;
-        
-        let query = `
-            SELECT id, code, created_by, created_for, purpose, max_uses, used_count,
-                   is_active, expires_at, used_by, notes, created_at, updated_at
-            FROM invitation_codes
-        `;
-        
-        let countQuery = `SELECT COUNT(*) as total FROM invitation_codes`;
-        const params = [];
-        const countParams = [];
-        
-        if (status === 'active') {
-            query += ` WHERE is_active = true AND (expires_at IS NULL OR expires_at > NOW())`;
-            countQuery += ` WHERE is_active = true AND (expires_at IS NULL OR expires_at > NOW())`;
-        } else if (status === 'inactive') {
-            query += ` WHERE is_active = false`;
-            countQuery += ` WHERE is_active = false`;
-        } else if (status === 'expired') {
-            query += ` WHERE expires_at < NOW()`;
-            countQuery += ` WHERE expires_at < NOW()`;
-        }
-        
-        query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-        params.push(parseInt(limit), offset);
-        
-        const result = await pool.query(query, params);
-        const countResult = await pool.query(countQuery, countParams);
-        
-        const total = parseInt(countResult.rows[0].total);
-        const totalPages = Math.ceil(total / limit);
-        
-        res.json({
-            success: true,
-            invitations: result.rows,
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total: total,
-                totalPages: totalPages,
-                hasNext: page < totalPages,
-                hasPrev: page > 1
-            }
-        });
-        
-    } catch (error) {
-        console.error('获取邀请码列表错误:', error);
-        res.status(500).json({
-            success: false,
-            error: '获取邀请码列表失败'
         });
     }
 });
