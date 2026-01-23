@@ -336,6 +336,8 @@ const corsOptions = {
       const allowedOrigins = [
         'https://footballdream.vercel.app',
         'https://admindream.vercel.app',
+        'https://footballdream.vip',
+        'https://www.footballdream.vip',
         'https://lwnn00.github.io',
         'https://dream-lilac.vercel.app'
       ];
