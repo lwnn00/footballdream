@@ -1497,23 +1497,48 @@ app.post('/api/recommend/asian', async (req, res) => {
     
     const handicapChange = currentHandicap - initialHandicap;
     const waterChange = currentWater - initialWater;
-    
-    if (handicapChange > 0 && waterChange > 0) {
-      recommendation = '上盘';
-      details = '盘口和水位同时上升，看好上盘';
-    } else if (handicapChange < 0 && waterChange < 0) {
-      recommendation = '下盘';
-      details = '盘口和水位同时下降，看好下盘';
-    } else if (currentWater < 0.85) {
-      recommendation = '上盘';
-      details = '低水位支撑上盘';
-    } else if (historicalRecord === 'win') {
-      recommendation = '上盘';
-      details = '历史战绩支持上盘';
-    } else {
-      recommendation = '下盘';
-      details = '综合考虑推荐下盘';
-    }
+    // 确定盘口变化方向
+            const handicapUp = handicapChange > 0;
+            const handicapDown = handicapChange < 0;
+
+            // 确定水位变化方向
+            const waterUp = waterChange > 0;
+            const waterDown = waterChange < 0;
+    if (handicapUp && waterUp && historicalRecord === "win") {
+                recommendation = "下盘";
+      details = '盘口和水位同时上升历史战绩赢，看好下盘';
+    } 
+       // 规则2: 盘口升，水位升，历史战绩输 -> 上盘
+            else if (handicapUp && waterUp && historicalRecord === "loss") {
+                recommendation = "上盘";
+            }
+            // 规则3: 盘口降，水位升，历史战绩输 -> 下盘
+            else if (handicapDown && waterUp && historicalRecord === "loss") {
+                recommendation = "下盘";
+            }
+            // 规则4: 盘口降，水位升，历史战绩赢 -> 上盘
+            else if (handicapDown && waterUp && historicalRecord === "win") {
+                recommendation = "上盘";
+            }
+            // 规则5: 盘口升，水位降，历史战绩输 -> 下盘
+            else if (handicapUp && waterDown && historicalRecord === "loss") {
+                recommendation = "下盘";
+            }
+            // 规则6: 盘口升，水位降，历史战绩赢 -> 上盘
+            else if (handicapUp && waterDown && historicalRecord === "win") {
+                recommendation = "上盘";
+            }
+            // 规则7: 盘口降，水位降，历史战绩输 -> 上盘
+            else if (handicapDown && waterDown && historicalRecord === "loss") {
+                recommendation = "上盘";
+            }
+            // 规则8: 盘口降，水位降，历史战绩赢 -> 下盘
+            else if (handicapDown && waterDown && historicalRecord === "win") {
+                recommendation = "下盘";
+            } else {
+                // 如果没有匹配的规则（例如盘口或水位无变化）
+                recommendation = "无明确推荐";
+            }
     
     res.json({
       success: true,
