@@ -1579,22 +1579,47 @@ app.post('/api/recommend/size', async (req, res) => {
     const handicapChange = currentHandicap - initialHandicap;
     const waterChange = currentWater - initialWater;
     
-    if (handicapChange > 0 && waterChange > 0) {
-      recommendation = '大球';
-      details = '盘口和水位同时上升，看好大球';
-    } else if (handicapChange < 0 && waterChange < 0) {
-      recommendation = '小球';
-      details = '盘口和水位同时下降，看好小球';
-    } else if (currentHandicap > 2.5) {
-      recommendation = '大球';
-      details = '高盘口支撑大球';
-    } else if (historicalRecord === 'win') {
-      recommendation = '大球';
-      details = '历史战绩支持大球';
-    } else {
-      recommendation = '小球';
-      details = '综合考虑推荐小球';
-    }
+    // 确定盘口变化方向
+            const handicapUp = handicapChange > 0;
+            const handicapDown = handicapChange < 0;
+
+            // 确定水位变化方向
+            const waterUp = waterChange > 0;
+            const waterDown = waterChange < 0; 
+    if (handicapUp && waterUp && historicalRecord === "win") {
+                recommendation = "小球";
+            }
+            // 规则2: 盘口升，水位升，历史战绩输 -> 大球
+            else if (handicapUp && waterUp && historicalRecord === "loss") {
+                recommendation = "大球";
+            }
+            // 规则3: 盘口降，水位升，历史战绩输 -> 小球
+            else if (handicapDown && waterUp && historicalRecord === "loss") {
+                recommendation = "小球";
+            }
+            // 规则4: 盘口降，水位升，历史战绩赢 -> 大球
+            else if (handicapDown && waterUp && historicalRecord === "win") {
+                recommendation = "大球";
+            }
+            // 规则5: 盘口升，水位降，历史战绩输 -> 小球
+            else if (handicapUp && waterDown && historicalRecord === "loss") {
+                recommendation = "小球";
+            }
+            // 规则6: 盘口升，水位降，历史战绩赢 -> 大球
+            else if (handicapUp && waterDown && historicalRecord === "win") {
+                recommendation = "大球";
+            }
+            // 规则7: 盘口降，水位降，历史战绩输 -> 大球
+            else if (handicapDown && waterDown && historicalRecord === "loss") {
+                recommendation = "大球";
+            }
+            // 规则8: 盘口降，水位降，历史战绩赢 -> 小球
+            else if (handicapDown && waterDown && historicalRecord === "win") {
+                recommendation = "小球";
+            } else {
+                // 如果没有匹配的规则（例如盘口或水位无变化）
+                recommendation = "无明确推荐";
+            }
     
     res.json({
       success: true,
