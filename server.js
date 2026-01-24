@@ -1506,8 +1506,7 @@ app.post('/api/recommend/asian', async (req, res) => {
             const waterDown = waterChange < 0;
     if (handicapUp && waterUp && historicalRecord === "win") {
                 recommendation = "下盘";
-      details = '盘口和水位同时上升历史战绩赢，看好下盘';
-    } 
+          } 
        // 规则2: 盘口升，水位升，历史战绩输 -> 上盘
             else if (handicapUp && waterUp && historicalRecord === "loss") {
                 recommendation = "上盘";
