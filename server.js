@@ -3274,6 +3274,119 @@ app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, 
         });
     }
 });
+// 43. 删除记录（管理员）
+app.delete('/api/admin/records/:recordId', authenticateAdmin, async (req, res) => {
+    try {
+        const { recordId } = req.params;
+        
+        // 检查记录是否存在
+        const recordCheck = await pool.query(
+            'SELECT id, user_id, match_name FROM records WHERE id = $1',
+            [recordId]
+        );
+        
+        if (recordCheck.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: '记录不存在'
+            });
+        }
+        
+        const record = recordCheck.rows[0];
+        
+        // 删除记录
+        await pool.query('DELETE FROM records WHERE id = $1', [recordId]);
+        
+        // 记录操作日志
+        await pool.query(
+            `INSERT INTO admin_logs (user_id, username, action_type, action_description, ip_address, user_agent)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+                req.userId,
+                req.adminUsername || 'admin',
+                'delete_record',
+                `删除记录 ${recordId}，比赛：${record.match_name}，用户ID：${record.user_id}`,
+                req.ip,
+                req.get('user-agent')
+            ]
+        );
+        
+        res.json({
+            success: true,
+            message: '记录已删除',
+            deleted_record_id: recordId
+        });
+        
+    } catch (error) {
+        console.error('删除记录错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '删除记录失败'
+        });
+    }
+});
+
+// 44. 批量删除记录（管理员）
+app.post('/api/admin/records/batch-delete', authenticateAdmin, async (req, res) => {
+    try {
+        const { recordIds } = req.body;
+        
+        if (!Array.isArray(recordIds) || recordIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: '请选择要删除的记录'
+            });
+        }
+        
+        // 检查记录是否存在
+        const recordsCheck = await pool.query(
+            'SELECT id, match_name FROM records WHERE id = ANY($1)',
+            [recordIds]
+        );
+        
+        if (recordsCheck.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: '未找到指定记录'
+            });
+        }
+        
+        // 删除记录
+        const deleteResult = await pool.query(
+            'DELETE FROM records WHERE id = ANY($1) RETURNING id, match_name',
+            [recordIds]
+        );
+        
+        const deletedRecords = deleteResult.rows;
+        
+        // 记录操作日志
+        await pool.query(
+            `INSERT INTO admin_logs (user_id, username, action_type, action_description, ip_address, user_agent)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+                req.userId,
+                req.adminUsername || 'admin',
+                'batch_delete_records',
+                `批量删除 ${deletedRecords.length} 条记录，ID列表：${recordIds.join(', ')}`,
+                req.ip,
+                req.get('user-agent')
+            ]
+        );
+        
+        res.json({
+            success: true,
+            message: `成功删除 ${deletedRecords.length} 条记录`,
+            deleted_records: deletedRecords
+        });
+        
+    } catch (error) {
+        console.error('批量删除记录错误:', error);
+        res.status(500).json({
+            success: false,
+            error: '批量删除记录失败'
+        });
+    }
+});
 // ============ 水位影响统计API ============
 
 // 水位影响统计（专门用于前端统计分析页面）
