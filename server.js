@@ -1729,7 +1729,242 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
     });
   }
 });
+// ============ 计算平均胜率API ============
+// 41. 计算并返回用户的历史平均胜率
+app.get('/api/stats/average-win-rate/:handicapType', authenticateToken, async (req, res) => {
+    try {
+        const { handicapType } = req.params;
+        const { userId } = req;
+        
+        console.log(`[平均胜率API] 开始计算 ${handicapType} 类型的平均胜率，用户ID: ${userId}`);
+        
+        // 验证盘口类型
+        if (!['asian', 'size'].includes(handicapType)) {
+            return res.status(400).json({
+                success: false,
+                error: '无效的盘口类型，只能是 asian 或 size'
+            });
+        }
+        
+        // 获取用户的历史记录
+        const result = await pool.query(
+            `SELECT 
+                water_change,
+                handicap_change,
+                actual_result
+             FROM records 
+             WHERE user_id = $1 
+               AND handicap_type = $2
+               AND actual_result IS NOT NULL 
+               AND actual_result != ''`,
+            [userId, handicapType]
+        );
+        
+        const history = result.rows;
+        console.log(`[平均胜率API] 找到 ${history.length} 条有效记录`);
+        
+        // 初始化统计变量
+        let waterUpTotal = 0, waterUpWins = 0;
+        let handicapUpTotal = 0, handicapUpWins = 0;
+        let waterChangeTotal = 0, waterChangeWins = 0;
+        
+        // 遍历记录进行统计
+        history.forEach(record => {
+            const waterChange = parseFloat(record.water_change) || 0;
+            const handicapChange = parseFloat(record.handicap_change) || 0;
+            const waterChangeAbs = Math.abs(waterChange);
+            const actualResult = record.actual_result;
+            
+            // 统计水位上升胜率
+            if (waterChange > 0) {
+                waterUpTotal++;
+                if (actualResult === 'win') waterUpWins++;
+            }
+            
+            // 统计盘口上升胜率
+            if (handicapChange > 0) {
+                handicapUpTotal++;
+                if (actualResult === 'win') handicapUpWins++;
+            }
+            
+            // 统计水位变化幅度胜率
+            if (waterChangeAbs > 0) {
+                waterChangeTotal++;
+                if (actualResult === 'win') waterChangeWins++;
+            }
+        });
+        
+        // 计算胜率（百分比）
+        const waterUpWinRate = waterUpTotal > 0 ? Math.round((waterUpWins / waterUpTotal) * 100) : 0;
+        const handicapUpWinRate = handicapUpTotal > 0 ? Math.round((handicapUpWins / handicapUpTotal) * 100) : 0;
+        const waterChangeWinRate = waterChangeTotal > 0 ? Math.round((waterChangeWins / waterChangeTotal) * 100) : 0;
+        
+        // 计算平均胜率
+        let averageWinRate = 0;
+        const totalConditions = (waterUpTotal > 0 ? 1 : 0) + 
+                               (handicapUpTotal > 0 ? 1 : 0) + 
+                               (waterChangeTotal > 0 ? 1 : 0);
+        
+        if (totalConditions > 0) {
+            const sumWinRate = (waterUpTotal > 0 ? waterUpWinRate : 0) + 
+                              (handicapUpTotal > 0 ? handicapUpWinRate : 0) + 
+                              (waterChangeTotal > 0 ? waterChangeWinRate : 0);
+            averageWinRate = Math.round(sumWinRate / totalConditions);
+        }
+        
+        console.log(`[平均胜率API] 计算完成:
+          水位上升胜率: ${waterUpWinRate}% (${waterUpWins}/${waterUpTotal})
+          盘口上升胜率: ${handicapUpWinRate}% (${handicapUpWins}/${handicapUpTotal})
+          水位变化胜率: ${waterChangeWinRate}% (${waterChangeWins}/${waterChangeTotal})
+          平均胜率: ${averageWinRate}%`);
+        
+        res.json({
+            success: true,
+            handicap_type: handicapType,
+            stats: {
+                average_win_rate: averageWinRate,
+                water_up_win_rate: waterUpWinRate,
+                handicap_up_win_rate: handicapUpWinRate,
+                water_change_win_rate: waterChangeWinRate,
+                details: {
+                    water_up_wins: waterUpWins,
+                    water_up_total: waterUpTotal,
+                    handicap_up_wins: handicapUpWins,
+                    handicap_up_total: handicapUpTotal,
+                    water_change_wins: waterChangeWins,
+                    water_change_total: waterChangeTotal
+                },
+                total_records: history.length,
+                valid_records: waterUpTotal + handicapUpTotal + waterChangeTotal
+            }
+        });
+        
+    } catch (error) {
+        console.error('[平均胜率API] 错误:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: '计算平均胜率失败',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
 
+// 42. 计算推荐时的实时平均胜率（结合当前数据）
+app.post('/api/stats/current-win-rate', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req;
+        const { 
+            handicap_type, 
+            water_change, 
+            handicap_change, 
+            historical_record 
+        } = req.body;
+        
+        console.log('[实时胜率API] 开始计算:', {
+            handicap_type, 
+            water_change, 
+            handicap_change, 
+            historical_record
+        });
+        
+        // 获取用户的历史记录
+        const result = await pool.query(
+            `SELECT 
+                water_change as waterChange,
+                handicap_change as handicapChange,
+                actual_result,
+                historical_record
+             FROM records 
+             WHERE user_id = $1 
+               AND handicap_type = $2
+               AND actual_result IS NOT NULL 
+               AND actual_result != ''`,
+            [userId, handicap_type]
+        );
+        
+        const history = result.rows;
+        
+        // 筛选与当前条件相似的记录
+        let similarRecords = [];
+        let similarWins = 0;
+        
+        // 定义相似度匹配规则
+        history.forEach(record => {
+            const isWaterSimilar = Math.abs(record.waterchange - water_change) < 0.05;
+            const isHandicapSimilar = Math.abs(record.handicapchange - handicap_change) < 0.25;
+            const isHistoricalMatch = record.historical_record === historical_record;
+            
+            // 如果满足2个以上条件，认为是相似记录
+            const matchScore = (isWaterSimilar ? 1 : 0) + 
+                              (isHandicapSimilar ? 1 : 0) + 
+                              (isHistoricalMatch ? 1 : 0);
+            
+            if (matchScore >= 2) {
+                similarRecords.push(record);
+                if (record.actual_result === 'win') {
+                    similarWins++;
+                }
+            }
+        });
+        
+        // 计算相似记录的胜率
+        let currentWinRate = 0;
+        let confidence = 0; // 置信度，基于相似记录数量
+        
+        if (similarRecords.length > 0) {
+            currentWinRate = Math.round((similarWins / similarRecords.length) * 100);
+            confidence = Math.min(100, similarRecords.length * 10); // 每一条相似记录增加10%置信度
+        }
+        
+        // 如果没有相似记录，使用全局平均胜率
+        if (similarRecords.length === 0) {
+            const globalResult = await pool.query(
+                `SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN actual_result = 'win' THEN 1 ELSE 0 END) as wins
+                 FROM records 
+                 WHERE user_id = $1 
+                   AND handicap_type = $2
+                   AND actual_result IS NOT NULL 
+                   AND actual_result != ''`,
+                [userId, handicap_type]
+            );
+            
+            const globalTotal = parseInt(globalResult.rows[0].total) || 0;
+            const globalWins = parseInt(globalResult.rows[0].wins) || 0;
+            
+            if (globalTotal > 0) {
+                currentWinRate = Math.round((globalWins / globalTotal) * 100);
+                confidence = 50; // 全局数据置信度较低
+            }
+        }
+        
+        console.log(`[实时胜率API] 计算结果:
+          相似记录数: ${similarRecords.length}
+          相似记录胜率: ${similarRecords.length > 0 ? Math.round((similarWins / similarRecords.length) * 100) : 0}%
+          当前推荐胜率: ${currentWinRate}%
+          置信度: ${confidence}%`);
+        
+        res.json({
+            success: true,
+            win_rate: currentWinRate,
+            confidence: confidence,
+            similar_records: similarRecords.length,
+            details: {
+                similar_wins: similarWins,
+                similar_total: similarRecords.length,
+                algorithm: similarRecords.length > 0 ? 'similarity_matching' : 'global_average'
+            }
+        });
+        
+    } catch (error) {
+        console.error('[实时胜率API] 错误:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: '计算实时胜率失败'
+        });
+    }
+});
 // 16. 用户信息
 app.get('/api/user/info', authenticateToken, async (req, res) => {
   try {
@@ -3274,119 +3509,8 @@ app.post('/api/admin/applications/batch-action', authenticateAdmin, async (req, 
         });
     }
 });
-// 43. 删除记录（管理员）
-app.delete('/api/admin/records/:recordId', authenticateAdmin, async (req, res) => {
-    try {
-        const { recordId } = req.params;
-        
-        // 检查记录是否存在
-        const recordCheck = await pool.query(
-            'SELECT id, user_id, match_name FROM records WHERE id = $1',
-            [recordId]
-        );
-        
-        if (recordCheck.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                error: '记录不存在'
-            });
-        }
-        
-        const record = recordCheck.rows[0];
-        
-        // 删除记录
-        await pool.query('DELETE FROM records WHERE id = $1', [recordId]);
-        
-        // 记录操作日志
-        await pool.query(
-            `INSERT INTO admin_logs (user_id, username, action_type, action_description, ip_address, user_agent)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-                req.userId,
-                req.adminUsername || 'admin',
-                'delete_record',
-                `删除记录 ${recordId}，比赛：${record.match_name}，用户ID：${record.user_id}`,
-                req.ip,
-                req.get('user-agent')
-            ]
-        );
-        
-        res.json({
-            success: true,
-            message: '记录已删除',
-            deleted_record_id: recordId
-        });
-        
-    } catch (error) {
-        console.error('删除记录错误:', error);
-        res.status(500).json({
-            success: false,
-            error: '删除记录失败'
-        });
-    }
-});
 
-// 44. 批量删除记录（管理员）
-app.post('/api/admin/records/batch-delete', authenticateAdmin, async (req, res) => {
-    try {
-        const { recordIds } = req.body;
-        
-        if (!Array.isArray(recordIds) || recordIds.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: '请选择要删除的记录'
-            });
-        }
-        
-        // 检查记录是否存在
-        const recordsCheck = await pool.query(
-            'SELECT id, match_name FROM records WHERE id = ANY($1)',
-            [recordIds]
-        );
-        
-        if (recordsCheck.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                error: '未找到指定记录'
-            });
-        }
-        
-        // 删除记录
-        const deleteResult = await pool.query(
-            'DELETE FROM records WHERE id = ANY($1) RETURNING id, match_name',
-            [recordIds]
-        );
-        
-        const deletedRecords = deleteResult.rows;
-        
-        // 记录操作日志
-        await pool.query(
-            `INSERT INTO admin_logs (user_id, username, action_type, action_description, ip_address, user_agent)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-                req.userId,
-                req.adminUsername || 'admin',
-                'batch_delete_records',
-                `批量删除 ${deletedRecords.length} 条记录，ID列表：${recordIds.join(', ')}`,
-                req.ip,
-                req.get('user-agent')
-            ]
-        );
-        
-        res.json({
-            success: true,
-            message: `成功删除 ${deletedRecords.length} 条记录`,
-            deleted_records: deletedRecords
-        });
-        
-    } catch (error) {
-        console.error('批量删除记录错误:', error);
-        res.status(500).json({
-            success: false,
-            error: '批量删除记录失败'
-        });
-    }
-});
+
 // ============ 水位影响统计API ============
 
 // 水位影响统计（专门用于前端统计分析页面）
